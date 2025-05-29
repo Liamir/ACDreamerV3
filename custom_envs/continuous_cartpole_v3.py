@@ -17,11 +17,13 @@ import numpy as np
 class ContinuousCartPoleEnv(gym.Env):
     metadata = {
         'render_modes': ['human', 'rgb_array', 'matplotlib'],
-        'render_fps': 50
+        'render_fps': 50,
+        'observation_modes': ['unstructured', 'image']
     }
 
-    def __init__(self, render_mode=None):
+    def __init__(self, obs_mode='unstructured', render_mode="rgb_array"):
         self.render_mode = render_mode
+        self.obs_mode = obs_mode
         self.screen_width = 600
         self.screen_height = 400
         self.screen = None
@@ -55,14 +57,21 @@ class ContinuousCartPoleEnv(gym.Env):
             high=self.max_action,
             shape=(1,)
         )
-        # For RGB image, dtype=np.uint8 and shape=(H, W, C)
-        self.observation_space = spaces.Box(
-            low=0,
-            high=255,
-            shape=(self.screen_height, self.screen_width, 3),
-            dtype=np.uint8
-        )
 
+        if self.obs_mode == 'image':
+            # For RGB image, dtype=np.uint8 and shape=(H, W, C)
+            self.observation_space = spaces.Box(
+                low=0,
+                high=255,
+                shape=(self.screen_height, self.screen_width, 3),
+                dtype=np.uint8
+            )
+
+        elif self.obs_mode == 'unstructured':
+            self.observation_space = spaces.Box(-high, high)
+        
+        else:
+            raise NameError(f"Unknown observation mode {self.obs_mode}")
 
         self.seed()
         self.viewer = None
@@ -115,8 +124,16 @@ Any further steps are undefined behavior.
             self.steps_beyond_done += 1
             reward = 0.0
 
-        img_obs = self.render()  # Will return RGB array
-        return img_obs, reward, done, False, {}
+        if self.obs_mode == 'image':
+            img_obs = self.render()  # Will return RGB array
+            return img_obs, reward, done, False, {}
+        
+        elif self.obs_mode == 'unstructured':
+            return np.array(self.state), reward, done, False, {}
+        
+        else:
+            raise NameError(f"Unknown observation mode {self.obs_mode}")
+
 
     def reset(
         self,
@@ -133,9 +150,15 @@ Any further steps are undefined behavior.
         self.state = self.np_random.uniform(low=low, high=high, size=(4,))
         self.steps_beyond_terminated = None
         
-        img_obs = self.render()  # Will return RGB array
-        return img_obs, {}
-
+        if self.obs_mode == 'image':
+            img_obs = self.render()  # Will return RGB array
+            return img_obs, {}
+        
+        elif self.obs_mode == 'unstructured':
+            return np.array(self.state, dtype=np.float32), {}
+        
+        else:
+            raise NameError(f"Unknown observation mode {self.obs_mode}")
 
     def render(self):
         if self.render_mode is None:
