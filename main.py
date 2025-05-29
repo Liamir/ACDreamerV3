@@ -6,6 +6,9 @@ from dreamer    import Dreamer
 from utils      import loadConfig, seedEverything, plotMetrics
 from envs       import getEnvProperties, GymPixelsProcessingWrapper, CleanGymWrapper
 from utils      import saveLossesToCSV, ensureParentFolders
+from custom_envs import env_register
+from custom_envs.continuous_cartpole_v3 import ContinuousCartPoleEnv
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
@@ -21,7 +24,7 @@ def main(configFile):
     videoFilenameBase       = os.path.join(config.folderNames.videosFolder,         runName)
     ensureParentFolders(metricsFilename, plotFilename, checkpointFilenameBase, videoFilenameBase)
     
-    env             = CleanGymWrapper(GymPixelsProcessingWrapper(gym.wrappers.ResizeObservation(gym.make(config.environmentName), (64, 64))))
+    env             = CleanGymWrapper(GymPixelsProcessingWrapper(gym.wrappers.ResizeObservation(gym.make(config.environmentName, render_mode="rgb_array"), (64, 64))))
     envEvaluation   = CleanGymWrapper(GymPixelsProcessingWrapper(gym.wrappers.ResizeObservation(gym.make(config.environmentName, render_mode="rgb_array"), (64, 64))))
     
     observationShape, actionSize, actionLow, actionHigh = getEnvProperties(env)
@@ -56,5 +59,5 @@ def main(configFile):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=str, default="car-racing-v3.yml")
+    parser.add_argument("--config", type=str, default="continuous_cartpole-v0.yml")
     main(parser.parse_args().config)
