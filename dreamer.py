@@ -4,7 +4,7 @@ from torch.distributions import kl_divergence, Independent, OneHotCategoricalStr
 import numpy as np
 import os
 
-from networks import RecurrentModel, PriorNet, PosteriorNet, RewardModel, ContinueModel, EncoderConv, DecoderConv, Actor, Critic
+from networks import RecurrentModel, PriorNet, PosteriorNet, RewardModel, ContinueModel, EncoderConv, DecoderConv, EncoderMLP, DecoderMLP, Actor, Critic
 from utils import computeLambdaValues, Moments
 from buffer import ReplayBuffer
 import imageio
@@ -23,8 +23,8 @@ class Dreamer:
 
         self.actor           = Actor(self.fullStateSize, actionSize, actionLow, actionHigh, device,                                  config.actor          ).to(self.device)
         self.critic          = Critic(self.fullStateSize,                                                                            config.critic         ).to(self.device)
-        self.encoder         = EncoderConv(observationShape, self.config.encodedObsSize,                                             config.encoder        ).to(self.device)
-        self.decoder         = DecoderConv(self.fullStateSize, observationShape,                                                     config.decoder        ).to(self.device)
+        self.encoder         = EncoderMLP(np.prod(observationShape), self.config.encodedObsSize,                                             config.encoder        ).to(self.device)
+        self.decoder         = DecoderMLP(self.fullStateSize, np.prod(observationShape),                                                     config.decoder        ).to(self.device)
         self.recurrentModel  = RecurrentModel(config.recurrentSize, self.latentSize, actionSize,                                     config.recurrentModel ).to(self.device)
         self.priorNet        = PriorNet(config.recurrentSize, config.latentLength, config.latentClasses,                             config.priorNet       ).to(self.device)
         self.posteriorNet    = PosteriorNet(config.recurrentSize + config.encodedObsSize, config.latentLength, config.latentClasses, config.posteriorNet   ).to(self.device)
@@ -172,6 +172,8 @@ class Dreamer:
             action = torch.zeros(1, self.actionSize).to(self.device)
 
             observation = env.reset(seed= (seed + self.totalEpisodes if seed else None))
+            if isinstance(observation, tuple):
+                observation = observation[0]
             encodedObservation = self.encoder(torch.from_numpy(observation).float().unsqueeze(0).to(self.device))
 
             currentScore, stepCount, done, frames = 0, 0, False, []
@@ -182,7 +184,7 @@ class Dreamer:
                 action          = self.actor(torch.cat((recurrentState, latentState), -1))
                 actionNumpy     = action.cpu().numpy().reshape(-1)
 
-                nextObservation, reward, done = env.step(actionNumpy)
+                nextObservation, reward, done, _, _ = env.step(actionNumpy)
                 if not evaluation:
                     self.buffer.add(observation, actionNumpy, reward, nextObservation, done)
 

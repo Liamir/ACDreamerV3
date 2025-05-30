@@ -18,10 +18,10 @@ class ContinuousCartPoleEnv(gym.Env):
     metadata = {
         'render_modes': ['human', 'rgb_array', 'matplotlib'],
         'render_fps': 50,
-        'observation_modes': ['unstructured', 'image']
+        'observation_modes': ['vector', 'image']
     }
 
-    def __init__(self, obs_mode='unstructured', render_mode="rgb_array"):
+    def __init__(self, obs_mode='vector', render_mode="rgb_array"):
         self.render_mode = render_mode
         self.obs_mode = obs_mode
         self.screen_width = 600
@@ -67,7 +67,7 @@ class ContinuousCartPoleEnv(gym.Env):
                 dtype=np.uint8
             )
 
-        elif self.obs_mode == 'unstructured':
+        elif self.obs_mode == 'vector':
             self.observation_space = spaces.Box(-high, high)
         
         else:
@@ -128,7 +128,7 @@ Any further steps are undefined behavior.
             img_obs = self.render()  # Will return RGB array
             return img_obs, reward, done, False, {}
         
-        elif self.obs_mode == 'unstructured':
+        elif self.obs_mode == 'vector':
             return np.array(self.state), reward, done, False, {}
         
         else:
@@ -154,7 +154,7 @@ Any further steps are undefined behavior.
             img_obs = self.render()  # Will return RGB array
             return img_obs, {}
         
-        elif self.obs_mode == 'unstructured':
+        elif self.obs_mode == 'vector':
             return np.array(self.state, dtype=np.float32), {}
         
         else:

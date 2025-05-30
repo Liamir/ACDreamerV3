@@ -24,8 +24,8 @@ def main(configFile):
     videoFilenameBase       = os.path.join(config.folderNames.videosFolder,         runName)
     ensureParentFolders(metricsFilename, plotFilename, checkpointFilenameBase, videoFilenameBase)
     
-    env             = CleanGymWrapper(GymPixelsProcessingWrapper(gym.wrappers.ResizeObservation(gym.make(config.environmentName, obs_mode='image', render_mode="rgb_array"), (64, 64))))
-    envEvaluation   = CleanGymWrapper(GymPixelsProcessingWrapper(gym.wrappers.ResizeObservation(gym.make(config.environmentName, obs_mode='image', render_mode="rgb_array"), (64, 64))))
+    env                     = gym.make(config.environmentName, obs_mode='vector', render_mode="rgb_array")
+    # envEvaluation   = CleanGymWrapper(GymPixelsProcessingWrapper(gym.wrappers.ResizeObservation(gym.make(config.environmentName, obs_mode='image', render_mode="rgb_array"), (64, 64))))
     
     observationShape, actionSize, actionLow, actionHigh = getEnvProperties(env)
     print(f"envProperties: obs {observationShape}, action size {actionSize}, actionLow {actionLow}, actionHigh {actionHigh}")

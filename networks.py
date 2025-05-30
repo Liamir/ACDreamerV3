@@ -120,6 +120,96 @@ class DecoderConv(nn.Module):
 
     def forward(self, x):
         return self.network(x)
+    
+
+### START - Add MLP Encoder / Decoder ###
+
+class NormedLinear(nn.Linear):
+	"""
+	Linear layer with LayerNorm, activation, and optionally dropout.
+	"""
+
+	def __init__(self, *args, dropout=0., act=None, **kwargs):
+		super().__init__(*args, **kwargs)
+		self.ln = nn.LayerNorm(self.out_features)
+		if act is None:
+			act = nn.Mish(inplace=False)
+		self.act = act
+		self.dropout = nn.Dropout(dropout, inplace=False) if dropout else None
+
+	def forward(self, x):
+		x = super().forward(x)
+		if self.dropout:
+			x = self.dropout(x)
+		return self.act(self.ln(x))
+
+	def __repr__(self):
+		repr_dropout = f", dropout={self.dropout.p}" if self.dropout else ""
+		return f"NormedLinear(in_features={self.in_features}, "\
+			f"out_features={self.out_features}, "\
+			f"bias={self.bias is not None}{repr_dropout}, "\
+			f"act={self.act.__class__.__name__})"
+     
+def mlp(in_dim, mlp_dims, out_dim, act=None, dropout=0.):
+    """
+    MLP with LayerNorm, Mish actiations, and optionally dropout.
+    """
+
+    if isinstance(mlp_dims, int):
+        mlp_dims = [mlp_dims]
+    dims = [in_dim] + mlp_dims + [out_dim]
+    mlp = nn.ModuleList()
+    for i in range(len(dims) - 2):
+        layer_dropout = dropout*(i==0)
+        mlp.append(NormedLinear(dims[i], dims[i+1], dropout=dropout*(i==0)))
+    mlp.append(NormedLinear(dims[-2], dims[-1], act=act) if act else nn.Linear(dims[-2], dims[-1]))
+    return nn.Sequential(*mlp)
+
+class EncoderMLP(nn.Module):
+    def __init__(self, inputShape, outputSize, config):
+        super().__init__()
+        self.config = config
+        activation = getattr(nn, self.config.activation)()
+        self.outputSize = outputSize
+
+        hidden_dims = [config.enc_dim] * max(config.num_enc_layers - 1, 1)
+        self.mlp = mlp(
+            in_dim=inputShape, 
+            mlp_dims=hidden_dims, 
+            out_dim=outputSize, 
+            act=activation,
+            dropout=getattr(config, 'dropout', 0.)
+        )
+
+    def forward(self, x):
+        return self.mlp(x)
+
+    
+class DecoderMLP(nn.Module):
+    def __init__(self, inputSize, outputShape, config):
+        super().__init__()
+        self.config = config
+        self.outputShape = outputShape
+        
+        # Get activation from config (usually None for decoder output)
+        activation = getattr(nn, self.config.activation)() if hasattr(config, 'activation') else None
+        
+        # Build the MLP - typically decoder mirrors encoder structure
+        hidden_dims = [config.dec_dim] * max(config.num_dec_layers - 1, 1)
+        
+        self.mlp = mlp(
+            in_dim=inputSize,
+            mlp_dims=hidden_dims,
+            out_dim=outputShape,
+            act=activation,  # Often None for reconstruction tasks
+            dropout=getattr(config, 'dropout', 0.)
+        )
+    
+    def forward(self, x):
+        return self.mlp(x)
+
+
+### END - Add MLP Encoder / Decoder ###
 
 
 class Actor(nn.Module):
