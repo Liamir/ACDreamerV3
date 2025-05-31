@@ -8,11 +8,12 @@ import os
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from custom_envs.continuous_cartpole_v4 import ContinuousCartPoleEnv
+from custom_envs.action_coupled_wrapper_v3 import ActionCoupledWrapper
 
 # Training script
-def train_ppo():
+def train_ppo(training_steps=100*1000):
     # Create vectorized environment (helps with training stability)
-    env = make_vec_env(lambda: ContinuousCartPoleEnv(), n_envs=4)
+    env = ActionCoupledWrapper(env_fn=ContinuousCartPoleEnv, k=4)
     
     # Initialize PPO model
     model = PPO(
@@ -31,7 +32,7 @@ def train_ppo():
     
     # Train the model
     print("Starting training...")
-    model.learn(total_timesteps=100000)
+    model.learn(total_timesteps=training_steps)
     
     # Save the model
     model.save("ppo_continuous_cartpole")
@@ -45,8 +46,8 @@ def load_and_test_model():
     model = PPO.load("ppo_continuous_cartpole.zip")  # or just "ppo_continuous_cartpole"
     print('loaded PPO model')
     # Create test environment
-    env = ContinuousCartPoleEnv(render_mode='human')
-    print('initialized cartpole env')
+    env = ActionCoupledWrapper(env_fn=ContinuousCartPoleEnv, k=4)
+    print('initialized action-coupled cartpole env')
     
     # Test for a few episodes
     for episode in range(5):
@@ -123,7 +124,8 @@ def inspect_checkpoint():
 
 if __name__ == "__main__":
     # Option 1: Train a new model
-    # model = train_ppo()
+    K_TRAINING_STEPS = 1#k
+    # model = train_ppo(training_steps=1000*K_TRAINING_STEPS)
     
     # Option 2: Load and test existing checkpoint
     load_and_test_model()
@@ -133,3 +135,8 @@ if __name__ == "__main__":
     
     # Option 4: Inspect checkpoint details
     # inspect_checkpoint()
+
+    # things we want to add or change:
+        # save model checkpoints during training and also save a video of the model's behavior at the checkpoint
+        # create a config file where useful settings are saved
+        # make it possible to see more than one environment when playing

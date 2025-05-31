@@ -12,7 +12,7 @@ class ContinuousCartPoleEnv(gym.Env):
         'render_fps': 50,
     }
 
-    def __init__(self, render_mode=None, max_episode_steps=500):
+    def __init__(self, render_mode="human", max_episode_steps=500):
         self.render_mode = render_mode
         self.max_episode_steps = max_episode_steps
         self.screen_width = 600
