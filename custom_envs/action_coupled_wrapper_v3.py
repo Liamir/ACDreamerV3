@@ -270,8 +270,11 @@ class ActionCoupledWrapper(Wrapper):
         
         # Stack observations into a single vector
         stacked_obs = np.concatenate(obs)
+
+        # End episode if at least half of the envs have finished
+        done = sum(done_flags) >= self.k - self.k // 2
         
-        return stacked_obs, sum(rewards), all(done_flags), False, {"individual_rewards": rewards, "infos": infos}
+        return stacked_obs, np.sum(rewards), done, False, {"individual_rewards": rewards, "infos": infos}
     
     def render(self):
         """Render all environments in a grid layout."""

@@ -33,7 +33,7 @@ class ContinuousCartPoleEnv(gym.Env):
         self.max_action = 1.0
 
         # Termination thresholds (matching official)
-        self.theta_threshold_radians = 12 * 2 * math.pi / 360
+        self.theta_threshold_radians = 45 * 2 * math.pi / 360
         self.x_threshold = 2.4
 
         # Observation space bounds

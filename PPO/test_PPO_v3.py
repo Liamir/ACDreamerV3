@@ -107,8 +107,54 @@ def load_from_checkpoint(checkpoint_path):
         print(f"Error loading checkpoint: {e}")
         return None
 
+# # Resume training from checkpoint
+# def resume_training_from_checkpoint(checkpoint_path, additional_steps=50000, checkpoint_freq=10000):
+#     """
+#     Resume training from a specific checkpoint
+    
+#     Args:
+#         checkpoint_path: Path to checkpoint file
+#         additional_steps: Additional training steps
+#         checkpoint_freq: Checkpoint frequency for continued training
+#     """
+#     # Load model from checkpoint
+#     model = load_from_checkpoint(checkpoint_path)
+#     if model is None:
+#         return None
+    
+#     # Create environment
+#     env = ActionCoupledWrapper(env_fn=ContinuousCartPoleEnv, k=4)
+#     model.set_env(env)
+    
+#     # Create checkpoint callback for continued training
+#     save_path = "./checkpoints_continued/"
+#     os.makedirs(save_path, exist_ok=True)
+    
+#     checkpoint_callback = CheckpointCallback(
+#         save_freq=checkpoint_freq,
+#         save_path=save_path,
+#         name_prefix="ppo_cartpole_continued",
+#         verbose=2
+#     )
+    
+#     # Continue training
+#     print(f"Resuming training from checkpoint for {additional_steps} additional steps...")
+#     model.learn(
+#         total_timesteps=additional_steps,
+#         callback=checkpoint_callback,
+#         reset_num_timesteps=False,  # Don't reset timestep counter
+#         progress_bar=True
+#     )
+    
+#     # Save final continued model
+#     final_path = os.path.join(save_path, "ppo_cartpole_continued_final")
+#     model.save(final_path)
+#     print(f"Continued training completed. Final model saved to: {final_path}")
+    
+#     return model
+
 # Resume training from checkpoint
-def resume_training_from_checkpoint(checkpoint_path, additional_steps=50000, checkpoint_freq=10000):
+def resume_training_from_checkpoint(checkpoint_path, additional_steps=50000, checkpoint_freq=10000, run_name="continued"):
     """
     Resume training from a specific checkpoint
     
@@ -116,42 +162,95 @@ def resume_training_from_checkpoint(checkpoint_path, additional_steps=50000, che
         checkpoint_path: Path to checkpoint file
         additional_steps: Additional training steps
         checkpoint_freq: Checkpoint frequency for continued training
+        run_name: Name prefix for continued training checkpoints
     """
     # Load model from checkpoint
     model = load_from_checkpoint(checkpoint_path)
     if model is None:
         return None
     
+    # Extract step count from checkpoint filename
+    import re
+    step_match = re.search(r'_checkpoint_(\d+)_steps$', checkpoint_path)
+    if step_match:
+        starting_steps = int(step_match.group(1))
+        print(f"Resuming from step: {starting_steps}")
+    else:
+        starting_steps = model.num_timesteps if hasattr(model, 'num_timesteps') else 0
+        print(f"Could not extract step count from filename, using model's timesteps: {starting_steps}")
+    
     # Create environment
     env = ActionCoupledWrapper(env_fn=ContinuousCartPoleEnv, k=4)
+    
+    # Create evaluation environment for tracking progress
+    eval_env = ActionCoupledWrapper(env_fn=ContinuousCartPoleEnv, k=4)
+    eval_env = Monitor(eval_env)
+    
     model.set_env(env)
     
     # Create checkpoint callback for continued training
     save_path = "./checkpoints_continued/"
     os.makedirs(save_path, exist_ok=True)
     
-    checkpoint_callback = CheckpointCallback(
+    # Custom checkpoint callback that accounts for starting steps
+    class ContinuedCheckpointCallback(CheckpointCallback):
+        def __init__(self, *args, starting_steps=0, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.starting_steps = starting_steps
+        
+        def _on_step(self) -> bool:
+            # Adjust the step count to continue from checkpoint
+            if self.n_calls % self.save_freq == 0:
+                current_step = self.num_timesteps
+                path = os.path.join(self.save_path, f"{self.name_prefix}_{current_step}_steps")
+                self.model.save(path)
+                if self.verbose >= 2:
+                    print(f"Saving model checkpoint to {path}")
+            return True
+    
+    checkpoint_callback = ContinuedCheckpointCallback(
         save_freq=checkpoint_freq,
         save_path=save_path,
-        name_prefix="ppo_cartpole_continued",
+        name_prefix=f"{run_name}_ppo_cartpole_continued",
+        starting_steps=starting_steps,
         verbose=2
     )
     
+    # Create evaluation callback for continued training
+    eval_callback = EvalCallback(
+        eval_env,
+        best_model_save_path=save_path,
+        log_path=save_path,
+        eval_freq=checkpoint_freq // 2,
+        deterministic=True,
+        render=False,
+        verbose=1,
+        n_eval_episodes=5
+    )
+    
+    # Combine callbacks
+    callbacks = [checkpoint_callback, eval_callback]
+    
     # Continue training
     print(f"Resuming training from checkpoint for {additional_steps} additional steps...")
+    print(f"Continued training checkpoints will use prefix: {run_name}")
+    print(f"Next checkpoint will be saved at step: {starting_steps + checkpoint_freq}")
+    
     model.learn(
         total_timesteps=additional_steps,
-        callback=checkpoint_callback,
+        callback=callbacks,
         reset_num_timesteps=False,  # Don't reset timestep counter
         progress_bar=True
     )
     
-    # Save final continued model
-    final_path = os.path.join(save_path, "ppo_cartpole_continued_final")
+    # Save final continued model with total step count
+    final_step_count = starting_steps + additional_steps
+    final_path = os.path.join(save_path, f"{run_name}_ppo_cartpole_continued_final_{final_step_count}_steps")
     model.save(final_path)
     print(f"Continued training completed. Final model saved to: {final_path}")
     
     return model
+
 
 # List available checkpoints
 def list_checkpoints(checkpoint_dir="./checkpoints/"):
@@ -193,7 +292,6 @@ def test_checkpoint(checkpoint_path, num_episodes=5):
         steps = 0
 
         print(f'Started episode number {episode + 1}')
-        
         while True:
             action, _states = model.predict(obs, deterministic=True)
             obs, reward, done, truncated, info = env.step(action)
@@ -271,36 +369,62 @@ def inspect_checkpoint(checkpoint_path="ppo_continuous_cartpole.zip"):
     except Exception as e:
         print(f"Could not read checkpoint details: {e}")
 
-if __name__ == "__main__":
-    # Option 1: Train a new model with checkpoints
-    K_TRAINING_STEPS = 100  # Multiplier for training steps
+import argparse
+
+def option_train():
+    K_TRAINING_STEPS = 200
     TOTAL_STEPS = 1000 * K_TRAINING_STEPS
     K_CHECKPOINT_FREQUENCY = 25
     CHECKPOINT_FREQUENCY = 1000 * K_CHECKPOINT_FREQUENCY
+    RUN_NAME = "half_angle45_f30_1"
 
-    RUN_NAME = "experiment_1"
-    
-    # print("Starting training with checkpoints...")
-    # model = train_ppo_with_checkpoints(
-    #     training_steps=TOTAL_STEPS,
-    #     checkpoint_freq=CHECKPOINT_FREQUENCY,
-    #     save_path="./checkpoints/",
-    #     run_name=RUN_NAME
-    # )
-    
-    # Option 2: List available checkpoints
-    # list_checkpoints()
-    
-    # Option 3: Resume training from specific checkpoint
-    # checkpoint_path = "./checkpoints/ppo_cartpole_checkpoint_50000_steps"
-    # resume_training_from_checkpoint(checkpoint_path, additional_steps=25000)
-    
-    # Option 4: Test specific checkpoint
-    checkpoint_path = "./checkpoints/experiment_1_ppo_ac_cartpole_checkpoint_50000_steps"
+    print("Starting training with checkpoints...")
+    model = train_ppo_with_checkpoints(
+        training_steps=TOTAL_STEPS,
+        checkpoint_freq=CHECKPOINT_FREQUENCY,
+        save_path="./checkpoints/",
+        run_name=RUN_NAME
+    )
+
+def option_list():
+    list_checkpoints()
+
+def option_resume():
+    RUN_NAME = 'half_angle45_f30_1'
+    # checkpoint_path = f"./checkpoints/half_stop_2_ppo_ac_cartpole_checkpoint_200000_steps"
+    checkpoint_path = f"./checkpoints/{RUN_NAME}_ppo_ac_cartpole_checkpoint_100000_steps"
+    resume_training_from_checkpoint(checkpoint_path, additional_steps=200000, checkpoint_freq=100000)
+
+def option_test():
+    RUN_NAME = 'half_angle45_f30_1'
+    checkpoint_path = f"./checkpoints/{RUN_NAME}_ppo_continuous_cartpole_final.zip"
+    # checkpoint_path = f"./checkpoints_continued/continued_ppo_cartpole_continued_final_400000_steps.zip"
     test_checkpoint(checkpoint_path, num_episodes=3)
-    
-    # Option 5: Load and test existing checkpoint
-    # load_and_test_model()
-    
-    # Option 6: Inspect checkpoint details
-    # inspect_checkpoint("./checkpoints/ppo_cartpole_checkpoint_50000_steps")
+
+def option_load_test():
+    load_and_test_model()
+
+def option_inspect():
+    inspect_checkpoint("./checkpoints/ppo_cartpole_checkpoint_50000_steps")
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Run RL training or evaluation options.")
+    parser.add_argument(
+        "option",
+        choices=["train", "list", "resume", "test", "load_test", "inspect"],
+        help="Choose which operation to perform."
+    )
+    args = parser.parse_args()
+
+    if args.option == "train":
+        option_train()
+    elif args.option == "list":
+        option_list()
+    elif args.option == "resume":
+        option_resume()
+    elif args.option == "test":
+        option_test()
+    elif args.option == "load_test":
+        option_load_test()
+    elif args.option == "inspect":
+        option_inspect()
