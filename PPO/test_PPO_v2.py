@@ -3,9 +3,11 @@ import numpy as np
 from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
 from gym import spaces
-
+import matplotlib.pyplot as plt
 import os
 import sys
+
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from custom_envs.continuous_cartpole_v4 import ContinuousCartPoleEnv
 from custom_envs.action_coupled_wrapper_v3 import ActionCoupledWrapper
@@ -46,9 +48,9 @@ def load_and_test_model():
     model = PPO.load("ppo_continuous_cartpole.zip")  # or just "ppo_continuous_cartpole"
     print('loaded PPO model')
     # Create test environment
-    env = ActionCoupledWrapper(env_fn=ContinuousCartPoleEnv, k=4)
+    env = ActionCoupledWrapper(env_fn=ContinuousCartPoleEnv, k=4, render_mode="human")
     print('initialized action-coupled cartpole env')
-    
+
     # Test for a few episodes
     for episode in range(5):
         obs = env.reset()
@@ -58,20 +60,22 @@ def load_and_test_model():
         steps = 0
 
         print(f'Started episode number {episode}')
-
         
         while True:
             action, _states = model.predict(obs, deterministic=True)
             obs, reward, done, truncated, info = env.step(action)
-            done = done or truncated
             
+            grid = env.render()
+
+            done = done or truncated
             total_reward += reward
             steps += 1
             
             if done:
                 print(f"Episode {episode + 1}: {steps} steps, reward: {total_reward}")
                 break
-
+                    
+    
 # Continue training from checkpoint
 def continue_training_from_checkpoint():
     # Load the existing model
@@ -125,10 +129,10 @@ def inspect_checkpoint():
 if __name__ == "__main__":
     # Option 1: Train a new model
     K_TRAINING_STEPS = 1#k
-    # model = train_ppo(training_steps=1000*K_TRAINING_STEPS)
+    model = train_ppo(training_steps=1000*K_TRAINING_STEPS)
     
     # Option 2: Load and test existing checkpoint
-    load_and_test_model()
+    # load_and_test_model()
     
     # Option 3: Continue training from checkpoint
     # continue_training_from_checkpoint()
@@ -137,6 +141,8 @@ if __name__ == "__main__":
     # inspect_checkpoint()
 
     # things we want to add or change:
-        # save model checkpoints during training and also save a video of the model's behavior at the checkpoint
+        # save model checkpoints during training
         # create a config file where useful settings are saved
-        # make it possible to see more than one environment when playing
+
+    # things we can do later:
+        #  also save a video of the model's behavior at checkpoints

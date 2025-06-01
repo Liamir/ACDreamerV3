@@ -13,7 +13,13 @@ logging.basicConfig(level=logging.INFO)
 logging.disable(logging.CRITICAL)
 
 class ActionCoupledWrapper(Wrapper):
-    def __init__(self, env_fn, k: int, seed=None, seeds=None, init_ranges=None):
+    # Add metadata for render modes
+    metadata = {
+        'render_modes': ['human', 'rgb_array'],
+        'render_fps': 50,
+    }
+    
+    def __init__(self, env_fn, k: int, seed=None, seeds=None, init_ranges=None, render_mode=None):
         """
         Initialize the ActionCoupledWrapper with controlled randomization and initial state.
         
@@ -26,9 +32,11 @@ class ActionCoupledWrapper(Wrapper):
                   Must have length k.
             init_ranges: Dictionary mapping state variable names to (min, max) tuples specifying
                         the initialization range for each variable.
+            render_mode: Render mode for all environments ('human', 'rgb_array', or None)
         """
         self.k = k
         self.init_ranges = init_ranges
+        self._render_mode = render_mode
         self._metadata = None
 
         # Handle seed initialization
@@ -50,11 +58,20 @@ class ActionCoupledWrapper(Wrapper):
         else:
             self.seeds = None
             
-        # Create environments with specific seeds
+        # Create environments with specific seeds and render mode
         self.envs = []
+
         for i in range(k):
-            env = env_fn()
-            
+            # Always create individual environments with rgb_array mode
+            # so they don't create their own display windows
+            try:
+                env = env_fn(render_mode="rgb_array")
+            except TypeError:
+                # Fallback if env_fn doesn't accept render_mode parameter
+                env = env_fn()
+                if hasattr(env, 'render_mode'):
+                    env.render_mode = "rgb_array"  # Force rgb_array mode
+
             # Seed the environment
             if self.seeds and hasattr(env, 'seed'):
                 env.seed(self.seeds[i])
@@ -85,6 +102,9 @@ class ActionCoupledWrapper(Wrapper):
         
         self.terminated_envs = [False] * k  # Track terminated state for each environment
         
+        # Rendering setup
+        self._setup_rendering()
+        
         # For logging purposes
         if self.seeds:
             logging.info(f"Initialized environments with seeds: {self.seeds}")
@@ -93,6 +113,51 @@ class ActionCoupledWrapper(Wrapper):
             
         # Reset immediately to apply seeds and init ranges
         self.reset(seed=seed)
+    
+    def _setup_rendering(self):
+        """Setup rendering parameters based on the number of environments."""
+        # Calculate grid layout
+        self.render_rows = math.ceil(math.sqrt(self.k))
+        self.render_cols = math.ceil(self.k / self.render_rows)
+        
+        # Rendering state
+        self.screen = None
+        self.clock = None
+        self.is_rendering_setup = False
+        
+        # Get dimensions from first environment if available
+        if hasattr(self.envs[0].unwrapped, 'screen_width'):
+            self.single_env_width = self.envs[0].unwrapped.screen_width
+            self.single_env_height = self.envs[0].unwrapped.screen_height
+        else:
+            # Default dimensions
+            self.single_env_width = 600
+            self.single_env_height = 400
+        
+        # Calculate total screen dimensions
+        self.total_width = self.render_cols * self.single_env_width
+        self.total_height = self.render_rows * self.single_env_height
+        
+        # Add padding between environments
+        self.padding = 2
+        self.total_width += (self.render_cols - 1) * self.padding
+        self.total_height += (self.render_rows - 1) * self.padding
+        
+    def _init_pygame_display(self):
+        """Initialize pygame display for human rendering."""
+        if not self.is_rendering_setup and self.render_mode == "human":
+            try:
+                import pygame
+                pygame.init()
+                pygame.display.init()
+                self.screen = pygame.display.set_mode((self.total_width, self.total_height))
+                pygame.display.set_caption(f"ActionCoupledWrapper - {self.k} Environments")
+                self.clock = pygame.time.Clock()
+                self.is_rendering_setup = True
+            except ImportError:
+                raise gym.error.DependencyNotInstalled(
+                    'pygame is not installed, run `pip install "gymnasium[classic-control]"`'
+                )
         
     @property
     def env(self):
@@ -104,6 +169,16 @@ class ActionCoupledWrapper(Wrapper):
         """Setter for .env property (for SB3 compatibility)."""
         if self.envs:
             self.envs[0] = value
+
+    @property
+    def render_mode(self):
+        """Get the render mode."""
+        return self._render_mode
+
+    @render_mode.setter  
+    def render_mode(self, value):
+        """Set the render mode."""
+        self._render_mode = value
         
     def reset(self, seed=None, options=None, init_ranges=None, **kwargs):
         """Reset all environments and return stacked observation."""
@@ -198,7 +273,158 @@ class ActionCoupledWrapper(Wrapper):
         
         return stacked_obs, sum(rewards), all(done_flags), False, {"individual_rewards": rewards, "infos": infos}
     
-    # ... (rest of the methods remain the same)
+    def render(self):
+        """Render all environments in a grid layout."""
+        if self.render_mode is None:
+            gym.logger.warn(
+                "You are calling render method without specifying any render mode. "
+                "You can specify the render_mode at initialization."
+            )
+            return None
+        
+        # Initialize pygame display if needed
+        if self.render_mode == "human":
+            self._init_pygame_display()
+        
+        # Collect frames from all environments
+        frames = []
+        for i, env in enumerate(self.envs):
+            try:
+                # Individual environments should already be in rgb_array mode
+                frame = env.render()
+                
+                # Handle None frames (environment might not be ready to render)
+                if frame is None:
+                    if frames:  # Use dimensions from previous frames
+                        h, w, c = frames[0].shape
+                        frame = np.zeros((h, w, c), dtype=np.uint8)
+                    else:  # Create a default black frame
+                        frame = np.zeros((self.single_env_height, self.single_env_width, 3), dtype=np.uint8)
+                
+                # Add environment index as text overlay for terminated environments
+                if self.terminated_envs[i]:
+                    frame = self._add_terminated_overlay(frame, i)
+                
+                frames.append(frame)
+                
+            except Exception as e:
+                logging.warning(f"Failed to render environment {i}: {e}")
+                # Create a red error frame
+                if frames:
+                    h, w, c = frames[0].shape
+                else:
+                    h, w, c = self.single_env_height, self.single_env_width, 3
+                error_frame = np.full((h, w, c), [255, 0, 0], dtype=np.uint8)  # Red frame
+                frames.append(error_frame)
+        
+        if not frames:
+            return None
+        
+        # Create grid layout
+        grid_image = self._create_grid_layout(frames)
+        
+        if self.render_mode == "human":
+            return self._render_human(grid_image)
+        else:  # rgb_array
+            return grid_image
+    
+    def _create_grid_layout(self, frames):
+        """Create a grid layout from individual environment frames."""
+        if not frames:
+            return None
+        
+        h, w, c = frames[0].shape
+        
+        # Create the grid canvas
+        grid_height = self.render_rows * h + (self.render_rows - 1) * self.padding
+        grid_width = self.render_cols * w + (self.render_cols - 1) * self.padding
+        grid = np.zeros((grid_height, grid_width, c), dtype=frames[0].dtype)
+        
+        # Place each frame in the grid
+        for idx, frame in enumerate(frames):
+            if idx >= self.k:  # Don't exceed the number of environments
+                break
+                
+            row = idx // self.render_cols
+            col = idx % self.render_cols
+            
+            # Calculate position with padding
+            y_start = row * (h + self.padding)
+            y_end = y_start + h
+            x_start = col * (w + self.padding)
+            x_end = x_start + w
+            
+            grid[y_start:y_end, x_start:x_end, :] = frame
+            
+            # Add environment number overlay
+            grid = self._add_env_number_overlay(grid, idx, x_start, y_start, w, h)
+        
+        return grid
+    
+    def _add_terminated_overlay(self, frame, env_idx):
+        """Add a semi-transparent overlay to indicate terminated environment."""
+        overlay = frame.copy()
+        # Add red tint to terminated environments
+        overlay[:, :, 0] = np.minimum(overlay[:, :, 0] + 50, 255)
+        return overlay
+    
+    def _add_env_number_overlay(self, grid, env_idx, x_start, y_start, w, h):
+        """Add environment number text overlay to each frame."""
+        # This is a simple pixel-based number overlay
+        # You could use PIL or OpenCV for better text rendering
+        
+        # Create a simple number display in the top-left corner
+        text_region_size = 20
+        if env_idx < 10:  # Single digit
+            # Simple pixel pattern for numbers 0-9
+            number_patterns = {
+                0: [[1,1,1],[1,0,1],[1,0,1],[1,0,1],[1,1,1]],
+                1: [[0,1,0],[1,1,0],[0,1,0],[0,1,0],[1,1,1]],
+                2: [[1,1,1],[0,0,1],[1,1,1],[1,0,0],[1,1,1]],
+                3: [[1,1,1],[0,0,1],[1,1,1],[0,0,1],[1,1,1]],
+                4: [[1,0,1],[1,0,1],[1,1,1],[0,0,1],[0,0,1]],
+                5: [[1,1,1],[1,0,0],[1,1,1],[0,0,1],[1,1,1]],
+                6: [[1,1,1],[1,0,0],[1,1,1],[1,0,1],[1,1,1]],
+                7: [[1,1,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1]],
+                8: [[1,1,1],[1,0,1],[1,1,1],[1,0,1],[1,1,1]],
+                9: [[1,1,1],[1,0,1],[1,1,1],[0,0,1],[1,1,1]]
+            }
+            
+            if env_idx in number_patterns:
+                pattern = number_patterns[env_idx]
+                for i, row in enumerate(pattern):
+                    for j, pixel in enumerate(row):
+                        if pixel and (y_start + 2 + i*2) < grid.shape[0] and (x_start + 2 + j*2) < grid.shape[1]:
+                            # Draw white pixel for number
+                            grid[y_start + 2 + i*2:y_start + 4 + i*2, 
+                                 x_start + 2 + j*2:x_start + 4 + j*2, :] = [255, 255, 255]
+        
+        return grid
+    
+    def _render_human(self, grid_image):
+        """Render the grid image to the pygame display."""
+        try:
+            import pygame
+            
+            if self.screen is None:
+                return None
+            
+            # Convert numpy array to pygame surface
+            surf = pygame.surfarray.make_surface(grid_image.swapaxes(0, 1))
+            self.screen.blit(surf, (0, 0))
+            
+            # Handle pygame events
+            pygame.event.pump()
+            if self.clock:
+                self.clock.tick(self.metadata['render_fps'])
+            pygame.display.flip()
+            
+            return None  # Human mode doesn't return anything
+            
+        except ImportError:
+            logging.error("pygame not available for human rendering")
+            return grid_image
+    
     def _construct_obs_from_state(self, env):
         """Manually construct observation from environment state."""
         # For your custom ContinuousCartPoleEnv, the observation is just the state
@@ -240,7 +466,7 @@ class ActionCoupledWrapper(Wrapper):
             
             env.unwrapped.state = state
             
-        # ... (other environment types remain the same)
+        # Add other environment types as needed
         
         if hasattr(env.unwrapped, 'steps_beyond_done'):
             env.unwrapped.steps_beyond_done = None
@@ -265,36 +491,21 @@ class ActionCoupledWrapper(Wrapper):
         
         return SeedContext(self, env_idx)
 
-    def render(self):
-        frames = []
-        for i, env in enumerate(self.envs):
-            if not self.terminated_envs[i]:
-                frame = env.render()
-                frames.append(frame)
-            else:
-                if frames:
-                    h, w, c = frames[0].shape
-                    frames.append(np.zeros((h, w, c), dtype=np.uint8))
-                else:
-                    frame = env.render()
-                    if frame is not None:
-                        frames.append(np.zeros_like(frame))
-        
-        if not frames or any(f is None for f in frames):
-            return None
-
-        # Create grid layout for multiple environments
-        rows = math.ceil(math.sqrt(self.k))
-        cols = math.ceil(self.k / rows)
-        h, w, c = frames[0].shape
-        grid = np.zeros((rows * h, cols * w, c), dtype=frames[0].dtype)
-
-        for idx, frame in enumerate(frames):
-            r, c_ = divmod(idx, cols)
-            grid[r*h:(r+1)*h, c_*w:(c_+1)*w, :] = frame
-
-        return grid
-
     def close(self):
+        """Close all environments and clean up rendering resources."""
         for env in self.envs:
             env.close()
+        
+        # Clean up pygame resources
+        if self.is_rendering_setup:
+            try:
+                import pygame
+                if pygame.get_init():
+                    pygame.display.quit()
+                    pygame.quit()
+            except ImportError:
+                pass
+        
+        self.screen = None
+        self.clock = None
+        self.is_rendering_setup = False
