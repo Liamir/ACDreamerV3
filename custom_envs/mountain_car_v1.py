@@ -147,8 +147,8 @@ class MountainCarEnv(gym.Env):
             position >= self.goal_position and velocity >= self.goal_velocity
         )
 
-        # position is between -1.2 and 0.6
-        # => reward is between -2.2 and 0.4
+        # position is between -1.2 and 0.5 (since 0.5 is the goal)
+        # => reward is between -2.2 and -0.5
         reward = -1.0 + position
 
         self.state = (position, velocity)
