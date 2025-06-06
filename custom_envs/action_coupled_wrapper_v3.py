@@ -7,6 +7,7 @@ import math
 import logging
 from custom_envs import env_register
 from custom_envs.continuous_cartpole_v4 import ContinuousCartPoleEnv  # Adjust import as needed
+from gym.spaces.box import Box as GymBox
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -85,9 +86,9 @@ class ActionCoupledWrapper(Wrapper):
         # Set up observation and action spaces
         single_obs_space = self.envs[0].observation_space
         self.action_space = self.envs[0].action_space
-        
+                
         # Create a stacked observation space (concatenate all observations)
-        if isinstance(single_obs_space, gym.spaces.Box):
+        if isinstance(single_obs_space, gym.spaces.Box) or isinstance(single_obs_space, GymBox):
             # For Box spaces, multiply the shape by k (number of environments)
             low = np.tile(single_obs_space.low, k)
             high = np.tile(single_obs_space.high, k)
@@ -179,6 +180,11 @@ class ActionCoupledWrapper(Wrapper):
     def render_mode(self, value):
         """Set the render mode."""
         self._render_mode = value
+
+    @property
+    def env_id(self):
+        spec = getattr(self.envs[0], "spec", None)
+        return spec.id if spec else "unknown_env"
         
     def reset(self, seed=None, options=None, init_ranges=None, **kwargs):
         """Reset all environments and return stacked observation."""
@@ -273,7 +279,9 @@ class ActionCoupledWrapper(Wrapper):
 
         # End episode if at least half of the envs have finished
         done = sum(done_flags) >= self.k - self.k // 2
-        
+        # number of live envs
+        # negative sum of angles in absolute value
+
         return stacked_obs, np.sum(rewards), done, False, {"individual_rewards": rewards, "infos": infos}
     
     def render(self):

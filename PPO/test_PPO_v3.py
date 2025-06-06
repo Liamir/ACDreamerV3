@@ -1,6 +1,6 @@
-import gym
+import gymnasium as gym
 import numpy as np
-from stable_baselines3 import PPO
+from stable_baselines3 import PPO, DDPG
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.callbacks import CheckpointCallback, EvalCallback
 from stable_baselines3.common.monitor import Monitor
@@ -8,14 +8,31 @@ from gym import spaces
 import matplotlib.pyplot as plt
 import os
 import sys
+import math
 
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+import custom_envs
 from custom_envs.continuous_cartpole_v4 import ContinuousCartPoleEnv
+# from custom_envs.mountain_car_v1 import MountainCarEnv
 from custom_envs.action_coupled_wrapper_v3 import ActionCoupledWrapper
 
+
+def print_env_info(env):
+    print("Environment Info:")
+    print(f"Env ID: {env.env_id}")
+    print(f"  Observation space: {env.observation_space}")
+    print(f"    Shape: {env.observation_space.shape}")
+    print(f"    Type: {type(env.observation_space)}")
+    print(f"  Action space: {env.action_space}")
+    print(f"    Shape: {env.action_space.shape}")
+    print(f"    Type: {type(env.action_space)}")
+    print()
+
+
+
 # Training script with checkpoints
-def train_ppo_with_checkpoints(training_steps=100*1000, checkpoint_freq=10000, save_path="./checkpoints/", run_name="run_name"):
+def train_ppo_with_checkpoints(k, training_steps, checkpoint_freq, save_path="./checkpoints/", run_name="run_name", init_ranges=None):
     """
     Train PPO with automatic checkpoint saving
     
@@ -28,12 +45,23 @@ def train_ppo_with_checkpoints(training_steps=100*1000, checkpoint_freq=10000, s
     os.makedirs(save_path, exist_ok=True)
     
     # Create vectorized environment (helps with training stability)
-    env = ActionCoupledWrapper(env_fn=ContinuousCartPoleEnv, k=4)
+    env = ActionCoupledWrapper(
+        env_fn=lambda render_mode=None: gym.make("CustomMountainCar-v0", render_mode="rgb_array"),
+        k=k,
+        init_ranges=init_ranges
+    )
     
     # Create evaluation environment for tracking progress
-    eval_env = ActionCoupledWrapper(env_fn=ContinuousCartPoleEnv, k=4)
+    eval_env = ActionCoupledWrapper(
+        env_fn=lambda render_mode=None: gym.make("CustomMountainCar-v0", render_mode="rgb_array"),
+        k=k,
+        init_ranges=init_ranges
+    )
+
     eval_env = Monitor(eval_env)
-    
+
+    print_env_info(env)
+
     # Initialize PPO model
     model = PPO(
         "MlpPolicy",  # Multi-layer perceptron policy
@@ -46,14 +74,30 @@ def train_ppo_with_checkpoints(training_steps=100*1000, checkpoint_freq=10000, s
         gamma=0.99,        # Discount factor
         gae_lambda=0.95,   # GAE parameter
         clip_range=0.2,    # PPO clip range
-        tensorboard_log="./ppo_cartpole_tensorboard/"
+        tensorboard_log="./ppo_tensorboard/"
     )
+
+    # model = DDPG(
+    #     "MlpPolicy",          # DDPG supports MLP policy
+    #     env,
+    #     verbose=1,
+    #     learning_rate=1e-3,   # Typical learning rate for DDPG
+    #     buffer_size=1000000,  # Replay buffer size
+    #     batch_size=64,
+    #     gamma=0.99,           # Discount factor
+    #     tau=0.005,            # Soft update coefficient
+    #     train_freq=(1, "episode"),  # Train after each episode
+    #     gradient_steps=-1,    # Train for as many steps as rollout
+    #     tensorboard_log="./ddpg_tensorboard/"
+    # )
+
+    ac_str = '_ac' if k > 1 else ''
     
     # Create checkpoint callback
     checkpoint_callback = CheckpointCallback(
         save_freq=checkpoint_freq,
         save_path=save_path,
-        name_prefix=f"{run_name}_ppo_ac_cartpole_checkpoint",  # Add run_name prefix
+        name_prefix=f"{run_name}_ppo_{ac_str}checkpoint",
         save_replay_buffer=False,
         save_vecnormalize=True,
         verbose=2
@@ -85,7 +129,7 @@ def train_ppo_with_checkpoints(training_steps=100*1000, checkpoint_freq=10000, s
     
 
     # Save final model
-    final_model_path = os.path.join(save_path, f"{run_name}_ppo_continuous_cartpole_final")
+    final_model_path = os.path.join(save_path, f"{run_name}_ppo_final_{training_steps}_steps")
     model.save(final_model_path)
     print(f"Final model saved to: {final_model_path}")
     
@@ -107,54 +151,8 @@ def load_from_checkpoint(checkpoint_path):
         print(f"Error loading checkpoint: {e}")
         return None
 
-# # Resume training from checkpoint
-# def resume_training_from_checkpoint(checkpoint_path, additional_steps=50000, checkpoint_freq=10000):
-#     """
-#     Resume training from a specific checkpoint
-    
-#     Args:
-#         checkpoint_path: Path to checkpoint file
-#         additional_steps: Additional training steps
-#         checkpoint_freq: Checkpoint frequency for continued training
-#     """
-#     # Load model from checkpoint
-#     model = load_from_checkpoint(checkpoint_path)
-#     if model is None:
-#         return None
-    
-#     # Create environment
-#     env = ActionCoupledWrapper(env_fn=ContinuousCartPoleEnv, k=4)
-#     model.set_env(env)
-    
-#     # Create checkpoint callback for continued training
-#     save_path = "./checkpoints_continued/"
-#     os.makedirs(save_path, exist_ok=True)
-    
-#     checkpoint_callback = CheckpointCallback(
-#         save_freq=checkpoint_freq,
-#         save_path=save_path,
-#         name_prefix="ppo_cartpole_continued",
-#         verbose=2
-#     )
-    
-#     # Continue training
-#     print(f"Resuming training from checkpoint for {additional_steps} additional steps...")
-#     model.learn(
-#         total_timesteps=additional_steps,
-#         callback=checkpoint_callback,
-#         reset_num_timesteps=False,  # Don't reset timestep counter
-#         progress_bar=True
-#     )
-    
-#     # Save final continued model
-#     final_path = os.path.join(save_path, "ppo_cartpole_continued_final")
-#     model.save(final_path)
-#     print(f"Continued training completed. Final model saved to: {final_path}")
-    
-#     return model
-
 # Resume training from checkpoint
-def resume_training_from_checkpoint(checkpoint_path, additional_steps=50000, checkpoint_freq=10000, run_name="continued"):
+def resume_training_from_checkpoint(k, checkpoint_path, additional_steps=50000, checkpoint_freq=10000, save_path="./checkpoints/", run_name="continued"):
     """
     Resume training from a specific checkpoint
     
@@ -176,20 +174,19 @@ def resume_training_from_checkpoint(checkpoint_path, additional_steps=50000, che
         starting_steps = int(step_match.group(1))
         print(f"Resuming from step: {starting_steps}")
     else:
-        starting_steps = model.num_timesteps if hasattr(model, 'num_timesteps') else 0
+        starting_steps = model.num_timesteps if hasattr(model, 'nu  m_timesteps') else 0
         print(f"Could not extract step count from filename, using model's timesteps: {starting_steps}")
     
     # Create environment
-    env = ActionCoupledWrapper(env_fn=ContinuousCartPoleEnv, k=4)
+    env = ActionCoupledWrapper(env_fn=ContinuousCartPoleEnv, k=k)
     
     # Create evaluation environment for tracking progress
-    eval_env = ActionCoupledWrapper(env_fn=ContinuousCartPoleEnv, k=4)
+    eval_env = ActionCoupledWrapper(env_fn=ContinuousCartPoleEnv, k=k)
     eval_env = Monitor(eval_env)
     
     model.set_env(env)
     
     # Create checkpoint callback for continued training
-    save_path = "./checkpoints_continued/"
     os.makedirs(save_path, exist_ok=True)
     
     # Custom checkpoint callback that accounts for starting steps
@@ -208,10 +205,12 @@ def resume_training_from_checkpoint(checkpoint_path, additional_steps=50000, che
                     print(f"Saving model checkpoint to {path}")
             return True
     
+    ac_str = '_ac' if k > 1 else ''
+
     checkpoint_callback = ContinuedCheckpointCallback(
         save_freq=checkpoint_freq,
         save_path=save_path,
-        name_prefix=f"{run_name}_ppo_cartpole_continued",
+        name_prefix=f"{run_name}_ppo_{ac_str}checkpoint_cont",
         starting_steps=starting_steps,
         verbose=2
     )
@@ -245,7 +244,7 @@ def resume_training_from_checkpoint(checkpoint_path, additional_steps=50000, che
     
     # Save final continued model with total step count
     final_step_count = starting_steps + additional_steps
-    final_path = os.path.join(save_path, f"{run_name}_ppo_cartpole_continued_final_{final_step_count}_steps")
+    final_path = os.path.join(save_path, f"{run_name}_ppo_final_cont_{final_step_count}_steps")
     model.save(final_path)
     print(f"Continued training completed. Final model saved to: {final_path}")
     
@@ -273,14 +272,23 @@ def list_checkpoints(checkpoint_dir="./checkpoints/"):
     return checkpoints
 
 # Test model from checkpoint
-def test_checkpoint(checkpoint_path, num_episodes=5):
+def test_checkpoint(k, checkpoint_path, num_episodes=5, init_ranges=None):
     """Test a model from a specific checkpoint"""
     model = load_from_checkpoint(checkpoint_path)
     if model is None:
         return
     
     # Create test environment
-    env = ActionCoupledWrapper(env_fn=ContinuousCartPoleEnv, k=4, render_mode="human")
+    env = ActionCoupledWrapper(
+        env_fn=lambda render_mode=None: gym.make("CustomMountainCar-v0", render_mode="rgb_array"),
+        k=k, render_mode="human",
+        init_ranges=init_ranges
+    )
+    # env = ActionCoupledWrapper(
+    #     env_fn=MountainCarEnv,
+    #     k=k, render_mode="human",
+    #     init_ranges=init_ranges
+    # )
     print(f'Testing model from checkpoint: {checkpoint_path}')
 
     # Test for specified episodes
@@ -307,13 +315,13 @@ def test_checkpoint(checkpoint_path, num_episodes=5):
                 break
 
 # Load and test the model from checkpoint
-def load_and_test_model():
+def load_and_test_model(k):
     # Load the trained model from the .zip checkpoint
     model = PPO.load("ppo_continuous_cartpole.zip")  # or just "ppo_continuous_cartpole"
     print('loaded PPO model')
     # Create test environment
-    env = ActionCoupledWrapper(env_fn=ContinuousCartPoleEnv, k=4, render_mode="human")
-    print('initialized action-coupled cartpole env')
+    env = ActionCoupledWrapper(env_fn=ContinuousCartPoleEnv, k=k, render_mode="human")
+    print('initialized action-coupled env')
 
     # Test for a few episodes
     for episode in range(5):
@@ -342,7 +350,6 @@ def load_and_test_model():
 # Inspect checkpoint information
 def inspect_checkpoint(checkpoint_path="ppo_continuous_cartpole.zip"):
     import zipfile
-    import json
     
     # Load model to get basic info
     model = PPO.load(checkpoint_path)
@@ -371,38 +378,66 @@ def inspect_checkpoint(checkpoint_path="ppo_continuous_cartpole.zip"):
 
 import argparse
 
-def option_train():
+
+def is_natural_number(value):
+    ivalue = int(value)
+    if ivalue <= 0:
+        raise argparse.ArgumentTypeError(f"{value} is not a natural number (must be > 0)")
+    return ivalue
+
+def option_train(k):
     K_TRAINING_STEPS = 200
     TOTAL_STEPS = 1000 * K_TRAINING_STEPS
-    K_CHECKPOINT_FREQUENCY = 25
+    K_CHECKPOINT_FREQUENCY = 50
     CHECKPOINT_FREQUENCY = 1000 * K_CHECKPOINT_FREQUENCY
-    RUN_NAME = "half_angle45_f30_1"
+    RUN_NAME = "mountain_car_pos_rew_1"
+
+    # INITIAL_MAX_ANGLE = 0.001
+    # INITIAL_RAD_ANGLE = INITIAL_MAX_ANGLE * 2 * math.pi / 360
+    # custom_init_ranges = {
+    #     'x': (-0.0, 0.0),          # Cart position range
+    #     'theta': (-INITIAL_RAD_ANGLE, INITIAL_RAD_ANGLE),      # Pole angle range (radians)
+    #     'x_dot': (-0.0, 0.0),    # Cart velocity range
+    #     'theta_dot': (-0.0, 0.0) # Pole angular velocity range
+    # }
 
     print("Starting training with checkpoints...")
     model = train_ppo_with_checkpoints(
+        k=k,
         training_steps=TOTAL_STEPS,
         checkpoint_freq=CHECKPOINT_FREQUENCY,
         save_path="./checkpoints/",
-        run_name=RUN_NAME
+        run_name=RUN_NAME,
+        init_ranges=None
     )
 
 def option_list():
     list_checkpoints()
 
-def option_resume():
+def option_resume(k):
     RUN_NAME = 'half_angle45_f30_1'
     # checkpoint_path = f"./checkpoints/half_stop_2_ppo_ac_cartpole_checkpoint_200000_steps"
-    checkpoint_path = f"./checkpoints/{RUN_NAME}_ppo_ac_cartpole_checkpoint_100000_steps"
-    resume_training_from_checkpoint(checkpoint_path, additional_steps=200000, checkpoint_freq=100000)
+    checkpoint_path = f"./checkpoints/{RUN_NAME}_ppo_ac_cartpole_checkpoint_200000_steps"
+    resume_training_from_checkpoint(k, checkpoint_path, additional_steps=200000, checkpoint_freq=100000)
 
-def option_test():
-    RUN_NAME = 'half_angle45_f30_1'
-    checkpoint_path = f"./checkpoints/{RUN_NAME}_ppo_continuous_cartpole_final.zip"
+def option_test(k):
+    RUN_NAME = 'mountain_car_6'
+    checkpoint_path = f"./checkpoints/{RUN_NAME}_ppo_final_10000_steps.zip"
     # checkpoint_path = f"./checkpoints_continued/continued_ppo_cartpole_continued_final_400000_steps.zip"
-    test_checkpoint(checkpoint_path, num_episodes=3)
 
-def option_load_test():
-    load_and_test_model()
+    # INITIAL_MAX_ANGLE = 0.001
+    # INITIAL_RAD_ANGLE = INITIAL_MAX_ANGLE * 2 * math.pi / 360
+    # custom_init_ranges = {
+    #     'x': (-0.0, 0.0),          # Cart position range
+    #     'theta': (-INITIAL_RAD_ANGLE, INITIAL_RAD_ANGLE),      # Pole angle range (radians)
+    #     'x_dot': (-0.0, 0.0),    # Cart velocity range
+    #     'theta_dot': (-0.0, 0.0) # Pole angular velocity range
+    # }
+
+    test_checkpoint(k, checkpoint_path, num_episodes=3, init_ranges=None)
+
+def option_load_test(k):
+    load_and_test_model(k)
 
 def option_inspect():
     inspect_checkpoint("./checkpoints/ppo_cartpole_checkpoint_50000_steps")
@@ -414,17 +449,24 @@ if __name__ == "__main__":
         choices=["train", "list", "resume", "test", "load_test", "inspect"],
         help="Choose which operation to perform."
     )
+
+    parser.add_argument(
+        "k",
+        type=is_natural_number,
+        help="Number of sub-envs in the action-coupled env."
+    )
+
     args = parser.parse_args()
 
     if args.option == "train":
-        option_train()
+        option_train(k=args.k)
     elif args.option == "list":
         option_list()
     elif args.option == "resume":
-        option_resume()
+        option_resume(k=args.k)
     elif args.option == "test":
-        option_test()
+        option_test(k=args.k)
     elif args.option == "load_test":
-        option_load_test()
+        option_load_test(k=args.k)
     elif args.option == "inspect":
         option_inspect()
