@@ -1,0 +1,81 @@
+!!python/object/new:config.DotDict
+dictitems:
+  algorithm: !!python/object/new:config.DotDict
+    dictitems:
+      hyperparameters: !!python/object/new:config.DotDict
+        dictitems:
+          batch_size: 64
+          clip_range: 0.2
+          clip_range_vf: null
+          ent_coef: 0.0
+          gae_lambda: 0.95
+          gamma: 0.99
+          learning_rate: 0.0003
+          max_grad_norm: 0.5
+          n_epochs: 10
+          n_steps: 2048
+          vf_coef: 0.5
+      name: PPO
+      policy_kwargs: !!python/object/new:config.DotDict
+        dictitems:
+          activation_fn: tanh
+          net_arch:
+          - 64
+          - 64
+      sde_sample_freq: -1
+      use_sde: false
+  deterministic_pytorch: true
+  environment: !!python/object/new:config.DotDict
+    dictitems:
+      custom_params: !!python/object/new:config.DotDict
+        dictitems:
+          goal_velocity: 0.0
+          height_reward_scale: 1.0
+      num_envs: 4
+      wrappers:
+      - !!python/object/new:config.DotDict
+        dictitems:
+          name: VecNormalize
+          normalize_obs: true
+          normalize_reward: true
+      - !!python/object/new:config.DotDict
+        dictitems:
+          n_stack: 1
+          name: VecFrameStack
+  evaluation: !!python/object/new:config.DotDict
+    dictitems:
+      deterministic: true
+      episodes: 100
+      render_mode: rgb_array
+      save_trajectories: false
+  experiment: !!python/object/new:config.DotDict
+    dictitems:
+      description: PPO on MountainCar with height-based rewards
+      env_import: CustomMountainCar-v0
+      name: height_reward
+      save_path: ../runs
+  logging: !!python/object/new:config.DotDict
+    dictitems:
+      console_log_level: INFO
+      custom_metrics:
+      - episode_height
+      - exploration_bonus
+      record_video: true
+      tensorboard: true
+      video_freq: 50000
+      video_length: 500
+      wandb: false
+  seed: 42
+  training: !!python/object/new:config.DotDict
+    dictitems:
+      early_stopping: !!python/object/new:config.DotDict
+        dictitems:
+          enabled: true
+          min_delta: 10.0
+          patience: 5
+      eval_deterministic: true
+      eval_freq: 25000
+      n_eval_episodes: 10
+      save_best_model: true
+      save_freq: 50000
+      total_timesteps: 3000

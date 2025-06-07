@@ -11,6 +11,8 @@ import math
 from datetime import datetime
 import yaml
 import json
+import glob
+import argparse
 
 from config import ConfigManager
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -39,7 +41,7 @@ def create_experiment_folder(cfg):
     
     # Simple naming: algorithm_env_timestamp
     k = cfg.environment.num_envs
-    ac_str = '{k}ac_' if k > 1 else ''
+    ac_str = f'{k}ac_' if k > 1 else ''
     run_name = cfg.experiment.name
     env_name = cfg.experiment.env_import.split('-')[0].lower()  # e.g., "mountaincar" from "MountainCar-v0"
     folder_name = f"{cfg.algorithm.name.lower()}_{ac_str}{env_name}_{run_name}_{timestamp}"
@@ -251,36 +253,121 @@ def load_from_checkpoint(checkpoint_path):
     except Exception as e:
         print(f"Error loading checkpoint: {e}")
         return None
+
+def find_model_from_config(cfg, model_type="best"):
+    """
+    Find model path based on config information and experiment structure
     
-
-# Test model from checkpoint
-def test_checkpoint(cfg, model_path=None, num_episodes=5, init_ranges=None):
-    """Test a model from a specific checkpoint"""
-
+    Args:
+        cfg: Configuration object
+        model_type: "best", "final", or "checkpoint_XXXX"
+    
+    Returns:
+        str: Path to model file, or None if not found
+    """
+    
+    # Reconstruct experiment folder pattern
     k = cfg.environment.num_envs
-    save_path = cfg.experiment.save_path
+    ac_str = f'{k}ac_' if k > 1 else ''
     run_name = cfg.experiment.name
-    checkpoint_path = os.path.join(save_path, f"{run_name}_{cfg.algorithm.name}_final_{cfg.training.total_timesteps}_steps")
-    # checkpoint_path = f"./checkpoints/{RUN_NAME}_ppo_final_10000_steps.zip"
+    env_name = cfg.experiment.env_import.split('-')[0].lower()
+    base_path = cfg.experiment.save_path
+    
+    # Pattern to match experiment folders
+    folder_pattern = f"{cfg.algorithm.name.lower()}_{ac_str}{env_name}_{run_name}_*"
+    search_pattern = os.path.join(base_path, folder_pattern)
+    
+    # Find matching experiment folders
+    matching_folders = glob.glob(search_pattern)
+    
+    if not matching_folders:
+        print(f"No experiment folders found matching pattern: {folder_pattern}")
+        return None
+    
+    # Sort by timestamp (most recent first)
+    matching_folders.sort(reverse=True)
+    latest_experiment = matching_folders[0]
+    
+    print(f"Found experiment folder: {os.path.basename(latest_experiment)}")
+    
+    # Determine model file based on type
+    models_dir = os.path.join(latest_experiment, "models")
+    
+    if model_type == "best":
+        model_path = os.path.join(models_dir, "best_model.zip")
+    elif model_type == "final":
+        model_path = os.path.join(models_dir, "final_model.zip")
+    elif model_type.startswith("checkpoint_"):
+        model_path = os.path.join(models_dir, f"{model_type}.zip")
+    else:
+        print(f"Unknown model_type: {model_type}")
+        return None
+    
+    # Check if model file exists
+    if os.path.exists(model_path):
+        print(f"Found model: {model_path}")
+        return model_path
+    else:
+        print(f"Model file not found: {model_path}")
+        
+        # Show available models in the directory
+        if os.path.exists(models_dir):
+            available_models = [f for f in os.listdir(models_dir) if f.endswith('.zip')]
+            print(f"Available models in {models_dir}:")
+            for model in available_models:
+                print(f"  - {model}")
+        
+        return None
 
+
+def test_checkpoint(cfg, model_path=None, num_episodes=5, init_ranges=None, model_type="best"):
+    """
+    Test a model from a checkpoint
+    
+    Args:
+        cfg: Configuration object
+        model_path: Direct path to model file (if provided, cfg info is ignored)
+        num_episodes: Number of episodes to test
+        init_ranges: Initialization ranges for environment
+        model_type: Type of model to load ("best", "final", or "checkpoint_XXXX")
+    """
+    
+    k = cfg.environment.num_envs
+    
+    # Determine model path
+    if model_path:
+        # Use provided path directly
+        checkpoint_path = model_path
+        print(f"Using provided model path: {checkpoint_path}")
+    else:
+        # Find model using cfg info and experiment structure
+        checkpoint_path = find_model_from_config(cfg, model_type)
+        if not checkpoint_path:
+            print("Could not find model. Please provide model_path or ensure experiment exists.")
+            return
+    
+    # Load model
     model = load_from_checkpoint(checkpoint_path)
     if model is None:
+        print(f"Failed to load model from: {checkpoint_path}")
         return
     
     # Create test environment
     env = ActionCoupledWrapper(
-        env_fn=lambda render_mode=None: gym.make("CustomMountainCar-v0", render_mode="rgb_array"),
+        env_fn=lambda render_mode=None: gym.make(cfg.experiment.env_import, render_mode="rgb_array"),
         k=k, render_mode="human",
         init_ranges=init_ranges
     )
-    # env = ActionCoupledWrapper(
-    #     env_fn=MountainCarEnv,
-    #     k=k, render_mode="human",
-    #     init_ranges=init_ranges
-    # )
+    
     print(f'Testing model from checkpoint: {checkpoint_path}')
+    print(f'Environment: {cfg.experiment.env_import}')
+    print(f'Number of episodes: {num_episodes}')
+    print("-" * 50)
 
     # Test for specified episodes
+    episode_rewards = []
+    episode_steps = []
+    
     for episode in range(num_episodes):
         obs = env.reset()
         if isinstance(obs, tuple):
@@ -288,7 +375,7 @@ def test_checkpoint(cfg, model_path=None, num_episodes=5, init_ranges=None):
         total_reward = 0
         steps = 0
 
-        print(f'Started episode number {episode + 1}')
+        print(f'Started episode {episode + 1}')
         while True:
             action, _states = model.predict(obs, deterministic=True)
             obs, reward, done, truncated, info = env.step(action)
@@ -301,53 +388,180 @@ def test_checkpoint(cfg, model_path=None, num_episodes=5, init_ranges=None):
             
             if done:
                 print(f"Episode {episode + 1}: {steps} steps, reward: {total_reward}")
+                episode_rewards.append(total_reward)
+                episode_steps.append(steps)
                 break
+    
+    # Print summary statistics
+    print("-" * 50)
+    print("TESTING SUMMARY:")
+    print(f"Average reward: {sum(episode_rewards)/len(episode_rewards):.2f}")
+    print(f"Average steps: {sum(episode_steps)/len(episode_steps):.2f}")
+    print(f"Best reward: {max(episode_rewards):.2f}")
+    print(f"Worst reward: {min(episode_rewards):.2f}")
+    
+    env.close()
+    return episode_rewards, episode_steps
+
+
+def extract_step_count(checkpoint_path, model):
+    """Extract step count from checkpoint path or model"""
+    import re
+    
+    # Try to extract from filename first
+    filename = os.path.basename(checkpoint_path)
+    
+    # Look for patterns like "checkpoint_50000_steps" or "final_100000_steps"
+    step_patterns = [
+        r'checkpoint_(\d+)_steps',
+        r'final_(\d+)_steps',
+        r'final_model_resumed_(\d+)_steps',
+        r'_(\d+)_steps'
+    ]
+    
+    for pattern in step_patterns:
+        match = re.search(pattern, filename)
+        if match:
+            steps = int(match.group(1))
+            print(f"Extracted {steps} steps from filename: {filename}")
+            return steps
+    
+    # Fall back to model's internal counter
+    if hasattr(model, 'num_timesteps'):
+        steps = model.num_timesteps
+        print(f"Using model's internal timestep counter: {steps}")
+        return steps
+    
+    # Last resort
+    print("Warning: Could not determine starting step count, assuming 0")
+    return 0
+
+
+def find_experiment_path_from_model_path(model_path):
+    """Extract experiment path from a model file path"""
+    # Assume structure: experiment_folder/models/model_file.zip
+    model_path = os.path.abspath(model_path)
+    
+    # Go up two levels: from model_file.zip -> models -> experiment_folder
+    experiment_path = os.path.dirname(os.path.dirname(model_path))
+    
+    # Verify this looks like an experiment folder
+    if os.path.exists(os.path.join(experiment_path, "config")) and \
+       os.path.exists(os.path.join(experiment_path, "models")):
+        return experiment_path
+    else:
+        print(f"Warning: {experiment_path} doesn't look like an experiment folder")
+        return os.path.dirname(model_path)  # Fall back to model directory
+
+
+def update_experiment_registry_for_resume(experiment_id, starting_steps, additional_steps, cfg):
+    """Update experiment registry when resuming training"""
+    registry_path = os.path.join(cfg.experiment.save_path, "experiments.json")
+    
+    if not os.path.exists(registry_path):
+        print("Warning: No experiment registry found")
+        return
+    
+    try:
+        with open(registry_path, 'r') as f:
+            registry = json.load(f)
+        
+        if experiment_id in registry:
+            registry[experiment_id]["status"] = "resuming"
+            registry[experiment_id]["resumed_at"] = datetime.now().isoformat()
+            registry[experiment_id]["resumed_from_steps"] = starting_steps
+            registry[experiment_id]["additional_steps"] = additional_steps
+            registry[experiment_id]["target_total_steps"] = starting_steps + additional_steps
+            
+            with open(registry_path, 'w') as f:
+                json.dump(registry, f, indent=2)
+            
+            print(f"Updated registry for resumed experiment: {experiment_id}")
+        else:
+            print(f"Warning: Experiment {experiment_id} not found in registry")
+    
+    except Exception as e:
+        print(f"Warning: Could not update experiment registry: {e}")
 
 
 # Resume training from checkpoint
-def resume_training_from_checkpoint(k, checkpoint_path, additional_steps=50000, checkpoint_freq=10000, save_path="./checkpoints/", run_name="continued"):
+def resume_training_from_checkpoint(cfg, model_path=None, additional_steps=None, model_type="best", init_ranges=None):
     """
     Resume training from a specific checkpoint
     
     Args:
-        checkpoint_path: Path to checkpoint file
-        additional_steps: Additional training steps
-        checkpoint_freq: Checkpoint frequency for continued training
-        run_name: Name prefix for continued training checkpoints
+        cfg: Configuration object
+        model_path: Direct path to model file (if provided, cfg info is ignored)
+        additional_steps: Additional training steps (if None, uses cfg.training.total_timesteps)
+        model_type: Type of model to load ("best", "final", or "checkpoint_XXXX")
+        init_ranges: Initialization ranges for environment
+    
+    Returns:
+        model: Trained model
+        experiment_path: Path to experiment folder
     """
-
-    k = cfg.environment.num_envs
-    ac_str = '{k}ac_' if k > 1 else ''
-    run_name = cfg.experiment.name
-    save_path = cfg.experiment.save_path
-    env_import = cfg.experiment.env_import
-
+    
+    # Determine additional steps
+    if additional_steps is None:
+        additional_steps = cfg.training.total_timesteps
+    
+    # Find the model to resume from
+    if model_path:
+        checkpoint_path = model_path
+        # Extract experiment folder from model path
+        experiment_path = find_experiment_path_from_model_path(model_path)
+        print(f"Using provided model path: {checkpoint_path}")
+    else:
+        # Find model using cfg info
+        checkpoint_path = find_model_from_config(cfg, model_type)
+        if not checkpoint_path:
+            print("Could not find model to resume from. Please provide model_path or ensure experiment exists.")
+            return None, None
+        
+        # Get experiment path from the found model
+        experiment_path = os.path.dirname(os.path.dirname(checkpoint_path))  # Go up from models/ to experiment root
+    
+    print(f"Resuming training from: {checkpoint_path}")
+    print(f"Experiment folder: {experiment_path}")
+    
     # Load model from checkpoint
     model = load_from_checkpoint(checkpoint_path)
     if model is None:
-        return None
+        return None, None
     
-    # Extract step count from checkpoint filename
-    import re
-    step_match = re.search(r'_checkpoint_(\d+)_steps$', checkpoint_path)
-    if step_match:
-        starting_steps = int(step_match.group(1))
-        print(f"Resuming from step: {starting_steps}")
-    else:
-        starting_steps = model.num_timesteps if hasattr(model, 'nu  m_timesteps') else 0
-        print(f"Could not extract step count from filename, using model's timesteps: {starting_steps}")
+    # Extract current step count
+    starting_steps = extract_step_count(checkpoint_path, model)
+    print(f"Starting from step: {starting_steps}")
+    print(f"Will train for {additional_steps} additional steps")
+    print(f"Final step count will be: {starting_steps + additional_steps}")
     
-    # Create environment
-    env = ActionCoupledWrapper(env_fn=ContinuousCartPoleEnv, k=k)
+    # Create environments
+    k = cfg.environment.num_envs
+    env_import = cfg.experiment.env_import
     
-    # Create evaluation environment for tracking progress
-    eval_env = ActionCoupledWrapper(env_fn=ContinuousCartPoleEnv, k=k)
+    env = ActionCoupledWrapper(
+        env_fn=lambda render_mode=None: gym.make(env_import, render_mode="rgb_array"),
+        k=k,
+        init_ranges=init_ranges
+    )
+    
+    eval_env = ActionCoupledWrapper(
+        env_fn=lambda render_mode=None: gym.make(env_import, render_mode="rgb_array"),
+        k=k,
+        init_ranges=init_ranges
+    )
     eval_env = Monitor(eval_env)
     
+    # Set environment for the loaded model
     model.set_env(env)
     
-    # Create checkpoint callback for continued training
-    os.makedirs(save_path, exist_ok=True)
+    # Update experiment status to "resuming"
+    experiment_id = os.path.basename(experiment_path)
+    update_experiment_registry_for_resume(experiment_id, starting_steps, additional_steps, cfg)
+    
+    # Create callbacks using existing experiment structure
+    models_path = os.path.join(experiment_path, "models")
+    logs_path = os.path.join(experiment_path, "logs")
     
     # Custom checkpoint callback that accounts for starting steps
     class ContinuedCheckpointCallback(CheckpointCallback):
@@ -356,114 +570,115 @@ def resume_training_from_checkpoint(k, checkpoint_path, additional_steps=50000, 
             self.starting_steps = starting_steps
         
         def _on_step(self) -> bool:
-            # Adjust the step count to continue from checkpoint
             if self.n_calls % self.save_freq == 0:
-                current_step = self.num_timesteps
-                path = os.path.join(self.save_path, f"{self.name_prefix}_{current_step}_steps")
+                # Use total timesteps (including previous training)
+                total_steps = self.starting_steps + self.num_timesteps
+                path = os.path.join(self.save_path, f"checkpoint_{total_steps}_steps")
                 self.model.save(path)
                 if self.verbose >= 2:
-                    print(f"Saving model checkpoint to {path}")
+                    print(f"Saving resumed checkpoint to {path}")
             return True
     
-    ac_str = '_ac' if k > 1 else ''
-
     checkpoint_callback = ContinuedCheckpointCallback(
-        save_freq=checkpoint_freq,
-        save_path=save_path,
-        name_prefix=f"{run_name}_ppo_{ac_str}checkpoint_cont",
+        save_freq=cfg.training.save_freq,
+        save_path=models_path,
+        name_prefix="checkpoint",
         starting_steps=starting_steps,
         verbose=2
     )
     
-    # Create evaluation callback for continued training
     eval_callback = EvalCallback(
         eval_env,
-        best_model_save_path=save_path,
-        log_path=save_path,
-        eval_freq=checkpoint_freq // 2,
+        best_model_save_path=models_path,
+        log_path=logs_path,
+        eval_freq=cfg.training.eval_freq,
         deterministic=True,
         render=False,
         verbose=1,
-        n_eval_episodes=5
+        n_eval_episodes=5,
     )
     
-    # Combine callbacks
     callbacks = [checkpoint_callback, eval_callback]
     
-    # Continue training
-    print(f"Resuming training from checkpoint for {additional_steps} additional steps...")
-    print(f"Continued training checkpoints will use prefix: {run_name}")
-    print(f"Next checkpoint will be saved at step: {starting_steps + checkpoint_freq}")
+    print("-" * 50)
+    print("RESUMING TRAINING...")
+    print("-" * 50)
     
-    model.learn(
-        total_timesteps=additional_steps,
-        callback=callbacks,
-        reset_num_timesteps=False,  # Don't reset timestep counter
-        progress_bar=True
-    )
-    
-    # Save final continued model with total step count
-    final_step_count = starting_steps + additional_steps
-    final_path = os.path.join(save_path, f"{run_name}_ppo_final_cont_{final_step_count}_steps")
-    model.save(final_path)
-    print(f"Continued training completed. Final model saved to: {final_path}")
-    
-    return model
-
-
-# List available checkpoints
-def list_checkpoints(checkpoint_dir="./checkpoints/"):
-    """List all available checkpoints in the directory"""
-    if not os.path.exists(checkpoint_dir):
-        print(f"Checkpoint directory {checkpoint_dir} does not exist.")
-        return []
-    
-    checkpoints = []
-    for file in os.listdir(checkpoint_dir):
-        if file.endswith('.zip') and 'checkpoint' in file:
-            checkpoints.append(os.path.join(checkpoint_dir, file))
-    
-    checkpoints.sort()  # Sort by name (which includes timestep info)
-    
-    print(f"Available checkpoints in {checkpoint_dir}:")
-    for i, checkpoint in enumerate(checkpoints):
-        print(f"{i+1}. {checkpoint}")
-    
-    return checkpoints
-
-
-# Load and test the model from checkpoint
-def load_and_test_model(k):
-    # Load the trained model from the .zip checkpoint
-    model = PPO.load("ppo_continuous_cartpole.zip")  # or just "ppo_continuous_cartpole"
-    print('loaded PPO model')
-    # Create test environment
-    env = ActionCoupledWrapper(env_fn=ContinuousCartPoleEnv, k=k, render_mode="human")
-    print('initialized action-coupled env')
-
-    # Test for a few episodes
-    for episode in range(5):
-        obs = env.reset()
-        if isinstance(obs, tuple):
-            obs = obs[0]
-        total_reward = 0
-        steps = 0
-
-        print(f'Started episode number {episode}')
+    try:
+        # Continue training
+        model.learn(
+            total_timesteps=additional_steps,
+            callback=callbacks,
+            reset_num_timesteps=False,  # Keep the original timestep counter
+            progress_bar=True
+        )
         
-        while True:
-            action, _states = model.predict(obs, deterministic=True)
-            obs, reward, done, truncated, info = env.step(action)
-            
-            grid = env.render()
+        # Save final model with updated step count
+        final_step_count = starting_steps + additional_steps
+        final_model_path = os.path.join(models_path, f"final_model_resumed_{final_step_count}_steps")
+        model.save(final_model_path)
+        print(f"Resumed training completed. Final model saved to: {final_model_path}")
+        
+        # Update experiment status
+        update_experiment_status(cfg, experiment_id, "completed", {
+            "resumed_from_steps": starting_steps,
+            "final_steps": final_step_count,
+            "additional_steps_trained": additional_steps
+        })
+        
+    except Exception as e:
+        print(f"Resume training failed: {e}")
+        update_experiment_status(cfg, experiment_id, "failed", {
+            "resumed_from_steps": starting_steps,
+            "error": str(e),
+            "resume_attempt": True
+        })
+        raise
+    
+    return model, experiment_path
 
-            done = done or truncated
-            total_reward += reward
-            steps += 1
-            
-            if done:
-                print(f"Episode {episode + 1}: {steps} steps, reward: {total_reward}")
-                break
+
+def list_experiments(cfg):
+    """List all experiments in the base path"""
+
+    base_path = cfg.experiment.save_path
+
+    if not os.path.exists(base_path):
+        print(f"Experiments directory not found: {base_path}")
+        return
+    
+    experiment_folders = glob.glob(os.path.join(base_path, "*"))
+    experiment_folders = [f for f in experiment_folders if os.path.isdir(f)]
+    experiment_folders.sort(reverse=True)  # Most recent first
+    
+    print(f"Found {len(experiment_folders)} experiments in {base_path}:")
+    print("-" * 80)
+    
+    for folder in experiment_folders:
+        folder_name = os.path.basename(folder)
+        
+        # Check for models
+        models_dir = os.path.join(folder, "models")
+        available_models = []
+        if os.path.exists(models_dir):
+            available_models = [f for f in os.listdir(models_dir) if f.endswith('.zip')]
+        
+        print(f"📁 {folder_name}")
+        print(f"   Models: {', '.join(available_models) if available_models else 'None'}")
+        
+        # Try to read config for more info
+        config_path = os.path.join(folder, "config", "config.json")
+        if os.path.exists(config_path):
+            try:
+                with open(config_path, 'r') as f:
+                    config = json.load(f)
+                    print(f"   Algorithm: {config.get('algorithm', {}).get('name', 'Unknown')}")
+                    print(f"   Environment: {config.get('experiment', {}).get('env_import', 'Unknown')}")
+                    print(f"   Steps: {config.get('training', {}).get('total_timesteps', 'Unknown')}")
+            except:
+                pass
+        print()
+
 
 # Inspect checkpoint information
 def inspect_checkpoint(checkpoint_path="ppo_continuous_cartpole.zip"):
@@ -494,14 +709,6 @@ def inspect_checkpoint(checkpoint_path="ppo_continuous_cartpole.zip"):
     except Exception as e:
         print(f"Could not read checkpoint details: {e}")
 
-import argparse
-
-
-def is_natural_number(value):
-    ivalue = int(value)
-    if ivalue <= 0:
-        raise argparse.ArgumentTypeError(f"{value} is not a natural number (must be > 0)")
-    return ivalue
 
 def option_train(cfg):
     # INITIAL_MAX_ANGLE = 0.001
@@ -516,16 +723,13 @@ def option_train(cfg):
     print(f"Starting training for {cfg.training.total_timesteps} steps, with checkpoints every {cfg.training.save_freq} steps")
     train_ppo_with_checkpoints(cfg, init_ranges=None)
 
-def option_list():
-    list_checkpoints()
+def option_list(cfg):
+    list_experiments(cfg)
 
-def option_resume(k):
-    RUN_NAME = 'half_angle45_f30_1'
-    # checkpoint_path = f"./checkpoints/half_stop_2_ppo_ac_cartpole_checkpoint_200000_steps"
-    checkpoint_path = f"./checkpoints/{RUN_NAME}_ppo_ac_cartpole_checkpoint_200000_steps"
-    resume_training_from_checkpoint(k, checkpoint_path, additional_steps=200000, checkpoint_freq=100000)
+def option_resume(cfg, model_path, additional_steps, model_type):
+    resume_training_from_checkpoint(cfg, model_path, additional_steps, model_type)
 
-def option_test(cfg):
+def option_test(cfg, model_path, model_type, num_episodes=3):
     # checkpoint_path = f"./checkpoints_continued/continued_ppo_cartpole_continued_final_400000_steps.zip"
 
     # INITIAL_MAX_ANGLE = 0.001
@@ -537,50 +741,134 @@ def option_test(cfg):
     #     'theta_dot': (-0.0, 0.0) # Pole angular velocity range
     # }
 
-    test_checkpoint(cfg, num_episodes=3, init_ranges=None)
+    path = "../runs/ppo_custommountaincar_height_reward_20250607_174849/models/final_model_resumed_80000_steps.zip"
+    
+    test_checkpoint(cfg, model_path=model_path, model_type=model_type, num_episodes=num_episodes, init_ranges=None)
 
-def option_load_test(k):
-    load_and_test_model(k)
 
 def option_inspect():
     inspect_checkpoint("./checkpoints/ppo_cartpole_checkpoint_50000_steps")
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run RL training or evaluation options.")
-    parser.add_argument(
-        "option",
-        choices=["train", "list", "resume", "test", "load_test", "inspect"],
-        help="Choose which operation to perform."
-    )
 
-    parser.add_argument(
-        "config",
-        type=str,
-        help="Path of yaml config file."
-    )
-
-    parser.add_argument(
-        "k",
-        type=is_natural_number,
-        nargs='?',
-        help="Number of sub-envs in the action-coupled env."
-    )
-
-    args = parser.parse_args()
+def map_cli_args_to_config_paths(args):
+    """Map short CLI argument names to config hierarchy paths"""
     
-    config = ConfigManager(args.config)
-    config.override_from_cli(args)
-    cfg = config.config
+    # Define the mapping from CLI args to config paths
+    arg_mapping = {
+        "num_envs": "environment.num_envs",
+        "k": "environment.num_envs",
+        "env": "experiment.env_import", 
+        "steps": "training.total_timesteps",
+        "run_name": "experiment.name",
+    }
+    
+    # Create new args namespace with mapped names
+    mapped_args = argparse.Namespace()
+    
+    # Copy all original arguments first
+    for attr_name, attr_value in vars(args).items():
+        setattr(mapped_args, attr_name, attr_value)
+    
+    # Add mapped versions for config overrides
+    for cli_arg, config_path in arg_mapping.items():
+        if hasattr(args, cli_arg) and getattr(args, cli_arg) is not None:
+            # Set the config path as an attribute
+            setattr(mapped_args, config_path, getattr(args, cli_arg))
+            print(f"CLI override: {config_path} = {getattr(args, cli_arg)}")
+    
+    return mapped_args
+
+
+def load_config_with_cli_overrides(config_path, cli_args):
+    """Load config and apply CLI overrides using short argument names"""
+    
+    # Load base configuration
+    config_manager = ConfigManager(config_path)
+    print(f"Loaded config from: {config_path}")
+    
+    # Map short CLI args to config paths
+    mapped_args = map_cli_args_to_config_paths(cli_args)
+    
+    # Apply the mapped overrides to config
+    config_manager.override_from_cli(mapped_args)
+    
+    return config_manager
+
+def create_argument_parser():
+    """Create argument parser with short, intuitive CLI argument names"""
+    parser = argparse.ArgumentParser(description="RL Training Pipeline")
+    
+    # Main command
+    parser.add_argument("option", choices=["train", "test", "resume", "list"], 
+                       help="Action to perform")
+    
+    # Config file
+    parser.add_argument("--config", type=str, required=True,
+                       help="Path to yaml configuration file")
+    
+    # Short CLI arguments
+    parser.add_argument("-k", "--num-envs", type=int, 
+                       help="Number of action-coupled environments")
+    
+    parser.add_argument("--env", type=str,
+                       help="Environment name (e.g., MountainCar-v0)")
+    
+    parser.add_argument("--steps", type=int, 
+                       help="Total training timesteps")
+    
+    parser.add_argument("--run-name", type=str,
+                       help="Experiment name")
+
+    
+    # # Action-specific arguments
+    parser.add_argument("--model-path", type=str,
+                       help="Direct path to model file (for test/resume)")
+    
+    parser.add_argument("--model-type", type=str, choices=["best", "final"], 
+                       default="best",
+                       help="Model type to use (for test/resume)")
+    
+    parser.add_argument("--episodes", type=int, default=3,
+                       help="Number of episodes for testing")
+    
+    parser.add_argument("--additional-steps", type=int,
+                       help="Additional steps for resume training")
+    
+    return parser
+
+
+if __name__ == "__main__":
+    parser = create_argument_parser()
+    args = parser.parse_args()
+
+    print("=" * 60)
+    print("RL TRAINING PIPELINE")
+    print("=" * 60)
+    
+
+    config_manager = load_config_with_cli_overrides(args.config, args)
+    cfg = config_manager.config
+
+    # config = ConfigManager(args.config)
+    # config.override_from_cli(args)
+    # cfg = config.config
+
+    print(f"\nFinal Configuration:")
+    print(f"  Command: {args.option}")
+    print(f"  Environments: {cfg.environment.num_envs}")
+    print(f"  Algorithm: {cfg.algorithm.name}")
+    print(f"  Environment: {cfg.experiment.env_import}")
+    print(f"  Total steps: {cfg.training.total_timesteps}")
+    print(f"  Experiment: {cfg.experiment.name}")
+    print("-" * 60)
 
     if args.option == "train":
         option_train(cfg)
     elif args.option == "list":
-        option_list()
+        option_list(cfg)
     elif args.option == "resume":
-        option_resume(k=args.k)
+        option_resume(cfg, args.model_path, args.additional_steps, args.model_type)
     elif args.option == "test":
-        option_test(cfg)
-    elif args.option == "load_test":
-        option_load_test(k=args.k)
+        option_test(cfg, args.model_path, args.model_type, args.episodes)
     elif args.option == "inspect":
         option_inspect()

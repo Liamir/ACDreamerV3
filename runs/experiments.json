@@ -9,5 +9,73 @@
     "status": "completed",
     "updated": "2025-06-07T16:55:37.766062",
     "completed": "2025-06-07T16:55:37.766070"
+  },
+  "ppo_custommountaincar_height_reward_20250607_174849": {
+    "folder": "ppo_custommountaincar_height_reward_20250607_174849",
+    "path": "../runs/ppo_custommountaincar_height_reward_20250607_174849",
+    "algorithm": "PPO",
+    "environment": "CustomMountainCar-v0",
+    "total_timesteps": 30000,
+    "started": "2025-06-07T17:48:49.769972",
+    "status": "completed",
+    "updated": "2025-06-07T23:06:24.104629",
+    "completed": "2025-06-07T23:06:24.104638",
+    "resumed_at": "2025-06-07T23:06:02.887215",
+    "resumed_from_steps": 80000,
+    "additional_steps": 8000,
+    "target_total_steps": 88000,
+    "final_steps": 88000,
+    "additional_steps_trained": 8000
+  },
+  "ppo_carpole_env_change_test_20250607_204935": {
+    "folder": "ppo_carpole_env_change_test_20250607_204935",
+    "path": "../runs/ppo_carpole_env_change_test_20250607_204935",
+    "algorithm": "PPO",
+    "environment": "Carpole-v1",
+    "total_timesteps": 30000,
+    "started": "2025-06-07T20:49:35.460431",
+    "status": "running"
+  },
+  "ppo_cartpole_env_change_test_20250607_204946": {
+    "folder": "ppo_cartpole_env_change_test_20250607_204946",
+    "path": "../runs/ppo_cartpole_env_change_test_20250607_204946",
+    "algorithm": "PPO",
+    "environment": "Cartpole-v1",
+    "total_timesteps": 30000,
+    "started": "2025-06-07T20:49:46.657462",
+    "status": "running"
+  },
+  "ppo_cartpole_env_change_test_20250607_204959": {
+    "folder": "ppo_cartpole_env_change_test_20250607_204959",
+    "path": "../runs/ppo_cartpole_env_change_test_20250607_204959",
+    "algorithm": "PPO",
+    "environment": "CartPole-v1",
+    "total_timesteps": 30000,
+    "started": "2025-06-07T20:49:59.912830",
+    "status": "completed",
+    "updated": "2025-06-07T20:51:25.838116",
+    "completed": "2025-06-07T20:51:25.838123"
+  },
+  "ppo_{k}ac_custommountaincar_height_reward_20250607_211814": {
+    "folder": "ppo_{k}ac_custommountaincar_height_reward_20250607_211814",
+    "path": "../runs/ppo_{k}ac_custommountaincar_height_reward_20250607_211814",
+    "algorithm": "PPO",
+    "environment": "CustomMountainCar-v0",
+    "total_timesteps": 3000,
+    "started": "2025-06-07T21:18:14.992234",
+    "status": "completed",
+    "updated": "2025-06-07T21:18:27.023686",
+    "completed": "2025-06-07T21:18:27.023693"
+  },
+  "ppo_4ac_custommountaincar_height_reward_20250607_211943": {
+    "folder": "ppo_4ac_custommountaincar_height_reward_20250607_211943",
+    "path": "../runs/ppo_4ac_custommountaincar_height_reward_20250607_211943",
+    "algorithm": "PPO",
+    "environment": "CustomMountainCar-v0",
+    "total_timesteps": 3000,
+    "started": "2025-06-07T21:19:43.363523",
+    "status": "completed",
+    "updated": "2025-06-07T21:19:57.175895",
+    "completed": "2025-06-07T21:19:57.175903"
   }
 }

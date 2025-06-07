@@ -2,11 +2,9 @@ experiment:
   env_import: "CustomMountainCar-v0"
   name: "height_reward"
   description: "PPO on MountainCar with height-based rewards"
-  tags: ["ppo", "mountain_car", "custom_rewards"]
   save_path: "../runs"
   
 environment:
-  name: "CustomMountainCar-v0"
   num_envs: 1
   
   # Environment-specific settings
@@ -49,7 +47,7 @@ algorithm:
   sde_sample_freq: -1
 
 training:
-  total_timesteps: 2000
+  total_timesteps: 3000
   
   # Evaluation during training
   eval_freq: 25000
