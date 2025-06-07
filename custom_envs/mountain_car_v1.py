@@ -148,8 +148,8 @@ class MountainCarEnv(gym.Env):
         )
 
         # position is between -1.2 and 0.5 (since 0.5 is the goal)
-        # => reward is between -2.2 and -0.5
-        reward = -1.0 + position
+        # can also try using car height instead of position, which also rewards moving to the left hill
+        reward = -1.0 + self._height(position)
 
         self.state = (position, velocity)
         if self.render_mode == "human":

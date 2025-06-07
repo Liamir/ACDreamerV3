@@ -1,9 +1,9 @@
 experiment:
   env_import: "CustomMountainCar-v0"
-  name: "mountain_car_rew_pos_test"
-  description: "PPO on MountainCar with position-based rewards"
+  name: "height_reward"
+  description: "PPO on MountainCar with height-based rewards"
   tags: ["ppo", "mountain_car", "custom_rewards"]
-  save_path: "./checkpoints"
+  save_path: "../runs"
   
 environment:
   name: "CustomMountainCar-v0"
@@ -49,15 +49,15 @@ algorithm:
   sde_sample_freq: -1
 
 training:
-  total_timesteps: 1000
+  total_timesteps: 2000
   
   # Evaluation during training
-  eval_freq: 10000
+  eval_freq: 25000
   n_eval_episodes: 10
   eval_deterministic: true
   
   # Checkpointing
-  save_freq: 25000
+  save_freq: 50000
   save_best_model: true
   
   # Early stopping

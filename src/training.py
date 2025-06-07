@@ -1,7 +1,6 @@
 import gymnasium as gym
 import numpy as np
 from stable_baselines3 import PPO, DDPG
-from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.callbacks import CheckpointCallback, EvalCallback
 from stable_baselines3.common.monitor import Monitor
 from gym import spaces
@@ -9,13 +8,16 @@ import matplotlib.pyplot as plt
 import os
 import sys
 import math
-from config import ConfigManager
+from datetime import datetime
+import yaml
+import json
 
+from config import ConfigManager
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import custom_envs
 from custom_envs.action_coupled_wrapper_v3 import ActionCoupledWrapper
 from custom_envs.continuous_cartpole_v4 import ContinuousCartPoleEnv
-# from custom_envs.mountain_car_v1 import MountainCarEnv
+
 
 def print_env_info(env):
     print("Environment Info:")
@@ -31,8 +33,107 @@ def print_env_info(env):
     print()
 
 
+def create_experiment_folder(cfg):
+    """Create standardized experiment folder"""
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    
+    # Simple naming: algorithm_env_timestamp
+    k = cfg.environment.num_envs
+    ac_str = '{k}ac_' if k > 1 else ''
+    run_name = cfg.experiment.name
+    env_name = cfg.experiment.env_import.split('-')[0].lower()  # e.g., "mountaincar" from "MountainCar-v0"
+    folder_name = f"{cfg.algorithm.name.lower()}_{ac_str}{env_name}_{run_name}_{timestamp}"
+    
+    base_path = cfg.experiment.save_path
+    experiment_path = os.path.join(base_path, folder_name)
+    
+    # Create structured subfolders
+    os.makedirs(os.path.join(experiment_path, "models"), exist_ok=True)
+    os.makedirs(os.path.join(experiment_path, "logs"), exist_ok=True)
+    os.makedirs(os.path.join(experiment_path, "config"), exist_ok=True)
+    
+    return experiment_path, folder_name
+
+
+def save_experiment_config(cfg, experiment_path):
+    """Save the complete configuration used for this experiment"""
+    
+    config_dict = cfg.to_dict() if hasattr(cfg, 'to_dict') else cfg
+    
+    # Save as both YAML (human readable) and JSON (machine readable)
+    with open(os.path.join(experiment_path, "config", "config.yaml"), 'w') as f:
+        yaml.dump(config_dict, f, default_flow_style=False)
+    
+    with open(os.path.join(experiment_path, "config", "config.json"), 'w') as f:
+        json.dump(config_dict, f, indent=2)
+
+
+def register_experiment(experiment_path, folder_name, cfg):
+    """Register experiment in a simple registry file"""
+    registry_path = os.path.join(cfg.experiment.save_path or "runs", "experiments.json")
+    
+    experiment_info = {
+        "folder": folder_name,
+        "path": experiment_path,
+        "algorithm": cfg.algorithm.name,
+        "environment": cfg.experiment.env_import,
+        "total_timesteps": cfg.training.total_timesteps,
+        "started": datetime.now().isoformat(),
+        "status": "running"
+    }
+    
+    # Load existing registry or create new
+    if os.path.exists(registry_path):
+        with open(registry_path, 'r') as f:
+            registry = json.load(f)
+    else:
+        registry = {}
+    
+    registry[folder_name] = experiment_info
+    
+    # Save updated registry
+    with open(registry_path, 'w') as f:
+        json.dump(registry, f, indent=2)
+    
+    return folder_name
+
+
+def update_experiment_status(cfg, experiment_id, status, additional_info=None):
+    """Update experiment status in the registry"""
+    registry_path = os.path.join(cfg.experiment.save_path, "experiments.json")
+    
+    if not os.path.exists(registry_path):
+        print(f"Warning: Registry file not found at {registry_path}")
+        return
+    
+    # Load existing registry
+    with open(registry_path, 'r') as f:
+        registry = json.load(f)
+    
+    if experiment_id not in registry:
+        print(f"Warning: Experiment {experiment_id} not found in registry")
+        return
+    
+    # Update status and completion time
+    registry[experiment_id]["status"] = status
+    registry[experiment_id]["updated"] = datetime.now().isoformat()
+    
+    if status == "completed":
+        registry[experiment_id]["completed"] = datetime.now().isoformat()
+    
+    # Add any additional information
+    if additional_info:
+        registry[experiment_id].update(additional_info)
+    
+    # Save updated registry
+    with open(registry_path, 'w') as f:
+        json.dump(registry, f, indent=2)
+    
+    print(f"Experiment {experiment_id} status updated to: {status}")
+
+
 # Training script with checkpoints
-def train_ppo_with_checkpoints(init_ranges=None):
+def train_ppo_with_checkpoints(cfg, init_ranges=None):
     """
     Train PPO with automatic checkpoint saving
     
@@ -43,13 +144,21 @@ def train_ppo_with_checkpoints(init_ranges=None):
     """
 
     k = cfg.environment.num_envs
-    ac_str = '{k}ac_' if k > 1 else ''
-    run_name = cfg.experiment.name
     save_path = cfg.experiment.save_path
     env_import = cfg.experiment.env_import
 
+
     # Create save directory if it doesn't exist
     os.makedirs(save_path, exist_ok=True)
+
+    experiment_path, experiment_id = create_experiment_folder(cfg)
+
+    register_experiment(experiment_path, experiment_id, cfg)
+
+    save_experiment_config(cfg, experiment_path)
+
+    print(f"Experiment ID: {experiment_id}")
+    print(f"Experiment path: {experiment_path}")
 
     # Create vectorized environment (helps with training stability)
     env = ActionCoupledWrapper(
@@ -83,25 +192,11 @@ def train_ppo_with_checkpoints(init_ranges=None):
         clip_range=cfg.algorithm.hyperparameters.clip_range,    # PPO clip range
         tensorboard_log="./ppo_tensorboard/"
     )
-
-    # model = DDPG(
-    #     "MlpPolicy",          # DDPG supports MLP policy
-    #     env,
-    #     verbose=1,
-    #     learning_rate=1e-3,   # Typical learning rate for DDPG
-    #     buffer_size=1000000,  # Replay buffer size
-    #     batch_size=64,
-    #     gamma=0.99,           # Discount factor
-    #     tau=0.005,            # Soft update coefficient
-    #     train_freq=(1, "episode"),  # Train after each episode
-    #     gradient_steps=-1,    # Train for as many steps as rollout
-    #     tensorboard_log="./ddpg_tensorboard/"
-    # )
     
     checkpoint_callback = CheckpointCallback(
         save_freq=cfg.training.save_freq,
-        save_path=save_path,
-        name_prefix=f"{run_name}_{cfg.algorithm.name}_{ac_str}checkpoint",
+        save_path=os.path.join(experiment_path, "models"),
+        name_prefix=f"checkpoint",
         save_replay_buffer=False,
         save_vecnormalize=True,
         verbose=2
@@ -109,8 +204,8 @@ def train_ppo_with_checkpoints(init_ranges=None):
     
     eval_callback = EvalCallback(
         eval_env,
-        best_model_save_path=save_path,
-        log_path=save_path,
+        best_model_save_path=os.path.join(experiment_path, "models"),
+        log_path=os.path.join(experiment_path, "logs"),
         eval_freq=cfg.training.eval_freq,
         deterministic=True,
         render=False,
@@ -123,7 +218,8 @@ def train_ppo_with_checkpoints(init_ranges=None):
     
     # Train the model with checkpoints
     print(f"Starting training")
-    print(f"Checkpoints will be saved to: {save_path}")
+    print(f"Checkpoints will be saved to: {experiment_path}")
+
     model.learn(
         total_timesteps=cfg.training.total_timesteps,
         callback=callbacks,
@@ -131,11 +227,14 @@ def train_ppo_with_checkpoints(init_ranges=None):
     )
     
     # Save final model
-    final_model_path = os.path.join(save_path, f"{run_name}_{cfg.algorithm.name}_final_{cfg.training.total_timesteps}_steps")
+    final_model_path = os.path.join(experiment_path, "models", "final_model")
     model.save(final_model_path)
     print(f"Final model saved to: {final_model_path}")
-    
+
+    update_experiment_status(cfg, experiment_id, "completed")
+
     return model
+
 
 # Load model from specific checkpoint
 def load_from_checkpoint(checkpoint_path):
@@ -152,6 +251,58 @@ def load_from_checkpoint(checkpoint_path):
     except Exception as e:
         print(f"Error loading checkpoint: {e}")
         return None
+    
+
+# Test model from checkpoint
+def test_checkpoint(cfg, model_path=None, num_episodes=5, init_ranges=None):
+    """Test a model from a specific checkpoint"""
+
+    k = cfg.environment.num_envs
+    save_path = cfg.experiment.save_path
+    run_name = cfg.experiment.name
+    checkpoint_path = os.path.join(save_path, f"{run_name}_{cfg.algorithm.name}_final_{cfg.training.total_timesteps}_steps")
+    # checkpoint_path = f"./checkpoints/{RUN_NAME}_ppo_final_10000_steps.zip"
+
+    model = load_from_checkpoint(checkpoint_path)
+    if model is None:
+        return
+    
+    # Create test environment
+    env = ActionCoupledWrapper(
+        env_fn=lambda render_mode=None: gym.make("CustomMountainCar-v0", render_mode="rgb_array"),
+        k=k, render_mode="human",
+        init_ranges=init_ranges
+    )
+    # env = ActionCoupledWrapper(
+    #     env_fn=MountainCarEnv,
+    #     k=k, render_mode="human",
+    #     init_ranges=init_ranges
+    # )
+    print(f'Testing model from checkpoint: {checkpoint_path}')
+
+    # Test for specified episodes
+    for episode in range(num_episodes):
+        obs = env.reset()
+        if isinstance(obs, tuple):
+            obs = obs[0]
+        total_reward = 0
+        steps = 0
+
+        print(f'Started episode number {episode + 1}')
+        while True:
+            action, _states = model.predict(obs, deterministic=True)
+            obs, reward, done, truncated, info = env.step(action)
+            
+            grid = env.render()
+
+            done = done or truncated
+            total_reward += reward
+            steps += 1
+            
+            if done:
+                print(f"Episode {episode + 1}: {steps} steps, reward: {total_reward}")
+                break
+
 
 # Resume training from checkpoint
 def resume_training_from_checkpoint(k, checkpoint_path, additional_steps=50000, checkpoint_freq=10000, save_path="./checkpoints/", run_name="continued"):
@@ -164,6 +315,12 @@ def resume_training_from_checkpoint(k, checkpoint_path, additional_steps=50000, 
         checkpoint_freq: Checkpoint frequency for continued training
         run_name: Name prefix for continued training checkpoints
     """
+
+    k = cfg.environment.num_envs
+    ac_str = '{k}ac_' if k > 1 else ''
+    run_name = cfg.experiment.name
+    save_path = cfg.experiment.save_path
+    env_import = cfg.experiment.env_import
 
     # Load model from checkpoint
     model = load_from_checkpoint(checkpoint_path)
@@ -274,55 +431,6 @@ def list_checkpoints(checkpoint_dir="./checkpoints/"):
     
     return checkpoints
 
-# Test model from checkpoint
-def test_checkpoint(num_episodes=5, init_ranges=None):
-    """Test a model from a specific checkpoint"""
-
-    k = cfg.environment.num_envs
-    save_path = cfg.experiment.save_path
-    run_name = cfg.experiment.name
-    checkpoint_path = os.path.join(save_path, f"{run_name}_{cfg.algorithm.name}_final_{cfg.training.total_timesteps}_steps")
-    # checkpoint_path = f"./checkpoints/{RUN_NAME}_ppo_final_10000_steps.zip"
-
-    model = load_from_checkpoint(checkpoint_path)
-    if model is None:
-        return
-    
-    # Create test environment
-    env = ActionCoupledWrapper(
-        env_fn=lambda render_mode=None: gym.make("CustomMountainCar-v0", render_mode="rgb_array"),
-        k=k, render_mode="human",
-        init_ranges=init_ranges
-    )
-    # env = ActionCoupledWrapper(
-    #     env_fn=MountainCarEnv,
-    #     k=k, render_mode="human",
-    #     init_ranges=init_ranges
-    # )
-    print(f'Testing model from checkpoint: {checkpoint_path}')
-
-    # Test for specified episodes
-    for episode in range(num_episodes):
-        obs = env.reset()
-        if isinstance(obs, tuple):
-            obs = obs[0]
-        total_reward = 0
-        steps = 0
-
-        print(f'Started episode number {episode + 1}')
-        while True:
-            action, _states = model.predict(obs, deterministic=True)
-            obs, reward, done, truncated, info = env.step(action)
-            
-            grid = env.render()
-
-            done = done or truncated
-            total_reward += reward
-            steps += 1
-            
-            if done:
-                print(f"Episode {episode + 1}: {steps} steps, reward: {total_reward}")
-                break
 
 # Load and test the model from checkpoint
 def load_and_test_model(k):
@@ -395,7 +503,7 @@ def is_natural_number(value):
         raise argparse.ArgumentTypeError(f"{value} is not a natural number (must be > 0)")
     return ivalue
 
-def option_train():
+def option_train(cfg):
     # INITIAL_MAX_ANGLE = 0.001
     # INITIAL_RAD_ANGLE = INITIAL_MAX_ANGLE * 2 * math.pi / 360
     # custom_init_ranges = {
@@ -406,7 +514,7 @@ def option_train():
     # }
 
     print(f"Starting training for {cfg.training.total_timesteps} steps, with checkpoints every {cfg.training.save_freq} steps")
-    train_ppo_with_checkpoints(init_ranges=None)
+    train_ppo_with_checkpoints(cfg, init_ranges=None)
 
 def option_list():
     list_checkpoints()
@@ -417,7 +525,7 @@ def option_resume(k):
     checkpoint_path = f"./checkpoints/{RUN_NAME}_ppo_ac_cartpole_checkpoint_200000_steps"
     resume_training_from_checkpoint(k, checkpoint_path, additional_steps=200000, checkpoint_freq=100000)
 
-def option_test():
+def option_test(cfg):
     # checkpoint_path = f"./checkpoints_continued/continued_ppo_cartpole_continued_final_400000_steps.zip"
 
     # INITIAL_MAX_ANGLE = 0.001
@@ -429,7 +537,7 @@ def option_test():
     #     'theta_dot': (-0.0, 0.0) # Pole angular velocity range
     # }
 
-    test_checkpoint(num_episodes=3, init_ranges=None)
+    test_checkpoint(cfg, num_episodes=3, init_ranges=None)
 
 def option_load_test(k):
     load_and_test_model(k)
@@ -465,13 +573,13 @@ if __name__ == "__main__":
     cfg = config.config
 
     if args.option == "train":
-        option_train()
+        option_train(cfg)
     elif args.option == "list":
         option_list()
     elif args.option == "resume":
         option_resume(k=args.k)
     elif args.option == "test":
-        option_test()
+        option_test(cfg)
     elif args.option == "load_test":
         option_load_test(k=args.k)
     elif args.option == "inspect":

@@ -1,0 +1,13 @@
+{
+  "ppo_custommountaincar_height_reward_20250607_165529": {
+    "folder": "ppo_custommountaincar_height_reward_20250607_165529",
+    "path": "../runs/ppo_custommountaincar_height_reward_20250607_165529",
+    "algorithm": "PPO",
+    "environment": "CustomMountainCar-v0",
+    "total_timesteps": 2000,
+    "started": "2025-06-07T16:55:29.295221",
+    "status": "completed",
+    "updated": "2025-06-07T16:55:37.766062",
+    "completed": "2025-06-07T16:55:37.766070"
+  }
+}

@@ -139,3 +139,8 @@ class ConfigManager:
         
         with open(output_path, 'w') as f:
             yaml.dump(self._config_dict, f, default_flow_style=False, indent=2)
+
+
+    def to_dict(self) -> Dict:
+        """Return the configuration as a regular dictionary"""
+        return self._config_dict
