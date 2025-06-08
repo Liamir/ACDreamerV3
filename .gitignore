@@ -1,9 +1,204 @@
-__pycache__
-checkpoints
-metrics
-plots
-videos
-test.ipynb
-visualizations
-mainVisualizations.py
-dreamerVisual.py
+# ==========================================
+# EXPERIMENT OUTPUTS (DO NOT COMMIT)
+# ==========================================
+
+# All experiment runs and outputs
+runs/
+experiments/
+checkpoints/
+models/
+*.zip
+*.pth
+*.pkl
+*.model
+
+# TensorBoard logs
+*tensorboard*/
+logs/
+tb_logs/
+**/logs/tensorboard/
+
+# Training videos and media
+videos/
+*.mp4
+*.avi
+*.gif
+frames/
+*_frames/
+
+# Evaluation results
+evaluations.npz
+*.npz
+results/
+metrics/
+plots/
+
+# ==========================================
+# PYTHON SPECIFIC
+# ==========================================
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# ==========================================
+# IDE AND EDITOR FILES
+# ==========================================
+
+# VSCode
+.vscode/
+*.code-workspace
+
+# PyCharm
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# ==========================================
+# SYSTEM FILES
+# ==========================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.directory
+.fuse_hidden*
+.nfs*
+
+# ==========================================
+# JUPYTER NOTEBOOKS
+# ==========================================
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*
+
+# IPython
+profile_default/
+ipython_config.py
+
+# ==========================================
+# OPTIONAL: KEEP SOME IMPORTANT RESULTS
+# ==========================================
+
+# Uncomment these if you want to track some specific results
+# !important_results/
+# !best_models/
+# !runs/important_experiment_*/config/
+# !*.yaml
+# !*.json
+
+# ==========================================
+# TEMPORARY AND BACKUP FILES
+# ==========================================
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup
+*.orig
+*.log
+
+# Archive and backup directories
+archive/
+backup/
+old/
+deprecated/
