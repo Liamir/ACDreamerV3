@@ -77,5 +77,16 @@
     "status": "completed",
     "updated": "2025-06-07T21:19:57.175895",
     "completed": "2025-06-07T21:19:57.175903"
+  },
+  "ppo_custommountaincar_height_reward_20250608_151537": {
+    "folder": "ppo_custommountaincar_height_reward_20250608_151537",
+    "path": "../runs/ppo_custommountaincar_height_reward_20250608_151537",
+    "algorithm": "PPO",
+    "environment": "CustomMountainCar-v0",
+    "total_timesteps": 3000,
+    "started": "2025-06-08T15:15:37.963567",
+    "status": "completed",
+    "updated": "2025-06-08T15:16:09.501783",
+    "completed": "2025-06-08T15:16:09.501793"
   }
 }

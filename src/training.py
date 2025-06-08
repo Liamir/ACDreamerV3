@@ -180,6 +180,10 @@ def train_ppo_with_checkpoints(cfg, init_ranges=None):
 
     print_env_info(env)
 
+    # Create experiment-specific tensorboard path
+    tensorboard_path = os.path.join(experiment_path, "logs", "tensorboard")
+    os.makedirs(tensorboard_path, exist_ok=True)
+
     # Initialize PPO model
     model = PPO(
         "MlpPolicy",  # Multi-layer perceptron policy
@@ -192,7 +196,7 @@ def train_ppo_with_checkpoints(cfg, init_ranges=None):
         gamma=cfg.algorithm.hyperparameters.gamma,        # Discount factor
         gae_lambda=cfg.algorithm.hyperparameters.gae_lambda,   # GAE parameter
         clip_range=cfg.algorithm.hyperparameters.clip_range,    # PPO clip range
-        tensorboard_log="./ppo_tensorboard/"
+        tensorboard_log=tensorboard_path
     )
     
     checkpoint_callback = CheckpointCallback(
@@ -221,6 +225,7 @@ def train_ppo_with_checkpoints(cfg, init_ranges=None):
     # Train the model with checkpoints
     print(f"Starting training")
     print(f"Checkpoints will be saved to: {experiment_path}")
+    print(f"TensorBoard logs: {tensorboard_path}")
 
     model.learn(
         total_timesteps=cfg.training.total_timesteps,

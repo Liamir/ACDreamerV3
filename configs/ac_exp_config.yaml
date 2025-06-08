@@ -50,12 +50,12 @@ training:
   total_timesteps: 3000
   
   # Evaluation during training
-  eval_freq: 25000
+  eval_freq: 1000
   n_eval_episodes: 10
   eval_deterministic: true
   
   # Checkpointing
-  save_freq: 50000
+  save_freq: 1500
   save_best_model: true
   
   # Early stopping
