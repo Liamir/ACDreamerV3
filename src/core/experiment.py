@@ -109,6 +109,71 @@ class ExperimentManager:
         
         for folder in experiment_folders:
             self._print_experiment_info(folder)
+
+
+    def _find_latest_final_model(self, models_dir):
+        """Find the most recent final model, including resumed ones"""
+        if not models_dir.exists():
+            return None
+        
+        # Look for all final model patterns
+        final_model_patterns = [
+            "final_model.zip",
+            "final_model_resumed_*_steps.zip"
+        ]
+        
+        final_models = []
+        for pattern in final_model_patterns:
+            final_models.extend(models_dir.glob(pattern))
+        
+        if not final_models:
+            return None
+        
+        # If only one final model, return it
+        if len(final_models) == 1:
+            return str(final_models[0])
+        
+        # Multiple final models - find the one with highest step count
+        best_model = None
+        highest_steps = -1
+        
+        for model_path in final_models:
+            steps = self._extract_steps_from_filename(model_path.name)
+            if steps > highest_steps:
+                highest_steps = steps
+                best_model = model_path
+        
+        if best_model:
+            print(f"Found multiple final models, using most recent: {best_model.name} ({highest_steps:,} steps)")
+            return str(best_model)
+        
+        # Fallback to most recently modified file
+        final_models.sort(key=lambda x: x.stat().st_mtime, reverse=True)
+        print(f"Using most recently modified final model: {final_models[0].name}")
+        return str(final_models[0])
+
+
+    def _extract_steps_from_filename(self, filename):
+        """Extract step count from filename, return 0 if not found"""
+        import re
+        
+        # Look for patterns like "final_model_resumed_300352_steps.zip"
+        step_patterns = [
+            r'final_model_resumed_(\d+)_steps',
+            r'final_model_(\d+)_steps',
+            r'_(\d+)_steps',
+        ]
+        
+        for pattern in step_patterns:
+            match = re.search(pattern, filename)
+            if match:
+                return int(match.group(1))
+        
+        # For basic "final_model.zip", assume it's from initial training
+        if filename == "final_model.zip":
+            return 0
+        
+        return -1  # Unknown pattern
     
     def find_model_from_config(self, cfg):
         """Find model path based on config information"""
@@ -142,7 +207,16 @@ class ExperimentManager:
         if model_type == "best":
             model_path = models_dir / "best_model.zip"
         elif model_type == "final":
-            model_path = models_dir / "final_model.zip"
+            # Find the most recent final model (including resumed ones)
+            model_path = self._find_latest_final_model(models_dir)
+            if model_path:
+                print(f"Found model: {model_path}")
+                return str(model_path)
+        elif model_type.startswith("checkpoint_"):
+            model_path = models_dir / f"{model_type}.zip"
+            if model_path.exists():
+                print(f"Found model: {model_path}")
+                return str(model_path)
         elif model_type.startswith("checkpoint_"):
             model_path = models_dir / f"{model_type}.zip"
         else:

@@ -37,7 +37,7 @@ def create_argument_parser():
     parser.add_argument("--model-path", type=str,
                        help="Direct path to model file (for test/resume)")
     
-    parser.add_argument("--model-type", type=str, choices=["best", "final"],
+    parser.add_argument("--model-type", type=str,
                        help="Model type to use (for test/resume)")
     
     parser.add_argument("--episodes", type=int,
