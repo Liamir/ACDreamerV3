@@ -2,9 +2,7 @@ experiment:
   env_import: "CustomMountainCar-v0"
   name: "height_reward"
   description: "PPO on MountainCar with height-based rewards"
-  save_path: "../runs"
-  
-environment:
+  save_path: "./runs"
   num_envs: 1
   
   # Environment-specific settings
@@ -47,7 +45,7 @@ algorithm:
   sde_sample_freq: -1
 
 training:
-  total_timesteps: 3000
+  total_timesteps: 10000
   
   # Evaluation during training
   eval_freq: 1000
@@ -55,7 +53,7 @@ training:
   eval_deterministic: true
   
   # Checkpointing
-  save_freq: 1500
+  save_freq: 5000
   save_best_model: true
   
   # Early stopping
@@ -82,10 +80,12 @@ logging:
 
 # Testing/evaluation settings
 evaluation:
-  episodes: 100
+  episodes: 2
+  model_type: "best"
   deterministic: true
   render_mode: "rgb_array"
   save_trajectories: false
+
 
 # Reproducibility
 seed: 42
