@@ -60,7 +60,7 @@ class ExperimentManager:
             "path": experiment_path,
             "algorithm": cfg.algorithm.name,
             "environment": cfg.experiment.env_import,
-            "total_timesteps": cfg.training.total_timesteps,
+            "total_timesteps": cfg.training.timesteps,
             "started": datetime.now().isoformat(),
             "status": "running"
         }
@@ -216,5 +216,5 @@ def print_env_info(env, cfg):
     print(f"  Action space: {env.action_space}")
     print(f"    Shape: {env.action_space.shape}")
     print(f"    Type: {type(env.action_space)}")
-    print(f'Training steps: {cfg.training.total_timesteps}')
+    print(f'Training steps: {cfg.training.timesteps}')
     print()

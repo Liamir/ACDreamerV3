@@ -29,7 +29,7 @@ class PPOTrainer:
     
     def train(self, init_ranges=None):
         """Train PPO model with checkpoints and evaluation"""
-        print(f"Starting PPO training for {self.cfg.training.total_timesteps} steps")
+        print(f"Starting PPO training for {self.cfg.training.timesteps} steps")
         
         # Create experiment structure
         experiment_path, experiment_id = self.experiment_manager.create_experiment_folder(self.cfg)
@@ -57,7 +57,7 @@ class PPOTrainer:
             print(f"Logs and checkpoints will be saved to: {experiment_path}")
             
             model.learn(
-                total_timesteps=self.cfg.training.total_timesteps,
+                total_timesteps=self.cfg.training.timesteps,
                 callback=callbacks,
                 progress_bar=True
             )
@@ -113,18 +113,17 @@ class PPOTrainer:
         env.close()
         return episode_rewards, episode_steps
     
-    def resume(self, model_path=None, additional_steps=None, model_type="best", init_ranges=None):
+    def resume(self, model_path=None, init_ranges=None):
         """Resume training from a checkpoint"""
-        # Determine additional steps
-        if additional_steps is None:
-            additional_steps = self.cfg.training.total_timesteps
+
+        additional_steps = self.cfg.training.timesteps
         
         # Find the model to resume from
         if model_path:
             checkpoint_path = model_path
             experiment_path = self._extract_experiment_path_from_model(model_path)
         else:
-            checkpoint_path = self.experiment_manager.find_model_from_config(self.cfg, model_type)
+            checkpoint_path = self.experiment_manager.find_model_from_config(self.cfg)
             if not checkpoint_path:
                 print("Could not find model to resume from.")
                 return None, None
@@ -248,10 +247,10 @@ class PPOTrainer:
             best_model_save_path=str(Path(experiment_path) / "models"),
             log_path=str(Path(experiment_path) / "logs"),
             eval_freq=self.cfg.training.eval_freq,
-            deterministic=True,
+            deterministic=self.cfg.training.eval_deterministic,
             render=False,
             verbose=1,
-            n_eval_episodes=5,
+            n_eval_episodes=self.cfg.training.n_eval_episodes,
         )
         
         return [checkpoint_callback, eval_callback]

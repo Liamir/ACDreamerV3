@@ -27,7 +27,7 @@ def create_argument_parser():
     parser.add_argument("--env", type=str,
                        help="Environment name (e.g., MountainCar-v0)")
     
-    parser.add_argument("--steps", type=int, 
+    parser.add_argument("--steps", type=int,
                        help="Total training timesteps")
     
     parser.add_argument("--run-name", type=str,
@@ -57,7 +57,8 @@ def map_cli_args_to_config_paths(args):
         "num_envs": "experiment.num_envs",
         "k": "experiment.num_envs",
         "env": "experiment.env_import", 
-        "steps": "training.total_timesteps",
+        "steps": "training.timesteps",
+        "additional_steps": "training.timesteps",
         "run_name": "experiment.name",
         "model_type": "evaluation.model_type",
         "episodes": "evaluation.episodes",
@@ -103,6 +104,6 @@ def print_configuration_summary(cfg, command):
     print(f"  Environments: {cfg.experiment.num_envs}")
     print(f"  Algorithm: {cfg.algorithm.name}")
     print(f"  Environment: {cfg.experiment.env_import}")
-    print(f"  Total steps: {cfg.training.total_timesteps}")
+    print(f"  Total steps: {cfg.training.timesteps}")
     print(f"  Experiment: {cfg.experiment.name}")
     print("-" * 60)

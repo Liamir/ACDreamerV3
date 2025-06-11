@@ -90,11 +90,7 @@ def handle_resume_command(cfg, args):
     # Create trainer based on algorithm
     if cfg.algorithm.name.lower() == "ppo":
         trainer = PPOTrainer(cfg)
-        trainer.resume(
-            model_path=args.model_path,
-            additional_steps=args.additional_steps,
-            model_type=args.model_type
-        )
+        trainer.resume(model_path=args.model_path)
     else:
         raise ValueError(f"Unsupported algorithm: {cfg.algorithm.name}")
     

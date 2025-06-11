@@ -38,7 +38,7 @@ class DotDict(dict):
 class ConfigManager:
     """
     Simple config manager for single hierarchical YAML files with CLI overrides
-    Supports both dot notation (config.training.total_timesteps) and dict access
+    Supports both dot notation (config.training.timesteps) and dict access
     """
     
     def __init__(self, config_path: Optional[str] = None):
