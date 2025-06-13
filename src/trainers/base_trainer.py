@@ -1,6 +1,5 @@
 """
-Base Trainer Module
-Contains common training functionality that can be shared across algorithms
+Base Trainer Module - Updated with config-based initialization
 """
 
 import os
@@ -27,6 +26,33 @@ class BaseTrainer(ABC):
         self.cfg = cfg
         self.experiment_manager = ExperimentManager(cfg.experiment.save_path)
     
+    def _get_initialization_options(self):
+        """Extract initialization options from config"""
+        options = {}
+        
+        # Check if initialization ranges are specified in config
+        if hasattr(self.cfg.experiment, 'init_low') and hasattr(self.cfg.experiment, 'init_high'):
+            init_low = getattr(self.cfg.experiment, 'init_low', None)
+            init_high = getattr(self.cfg.experiment, 'init_high', None)
+            
+            if init_low is not None and init_high is not None:
+                options['low'] = dict(init_low) if hasattr(init_low, '_asdict') else init_low
+                options['high'] = dict(init_high) if hasattr(init_high, '_asdict') else init_high
+                
+                print(f"Using custom initialization ranges:")
+                print(f"  Low: {options['low']}")
+                print(f"  High: {options['high']}")
+        
+        # Check for other environment-specific options
+        if hasattr(self.cfg.experiment, 'env_options'):
+            env_options = getattr(self.cfg.experiment, 'env_options', {})
+            if env_options:
+                options.update(dict(env_options) if hasattr(env_options, '_asdict') else env_options)
+                print(f"Using additional environment options: {env_options}")
+        
+        return options if options else None
+
+    
     def train(self, init_ranges=None):
         """Train model with checkpoints and evaluation"""
         print(f"Starting {self.cfg.algorithm.name} training for {self.cfg.training.timesteps} steps")
@@ -40,9 +66,12 @@ class BaseTrainer(ABC):
         print(f"Experiment path: {experiment_path}")
         
         try:
-            # Create environments
-            env = self._create_environment(init_ranges)
-            eval_env = self._create_environment(init_ranges, for_evaluation=True)
+            # Get initialization options from config (prefer this over init_ranges parameter)
+            config_options = self._get_initialization_options()
+            
+            # Create environments with config-based options
+            env = self._create_environment(config_options)
+            eval_env = self._create_environment(config_options, for_evaluation=True)
             
             print_env_info(env, self.cfg)
             
@@ -95,8 +124,11 @@ class BaseTrainer(ABC):
         if model is None:
             return
         
+        # Get initialization options from config
+        config_options = self._get_initialization_options()
+        
         # Create test environment
-        env = self._create_environment(init_ranges, render_mode="human")
+        env = self._create_environment(config_options, render_mode="human")
         
         print(f'Testing model from: {checkpoint_path}')
         print(f'Environment: {self.cfg.experiment.env_import}')
@@ -104,7 +136,7 @@ class BaseTrainer(ABC):
         print("-" * 50)
         
         # Test episodes
-        episode_rewards, episode_steps = self._run_test_episodes(model, env, num_episodes)
+        episode_rewards, episode_steps = self._run_test_episodes(model, env, num_episodes, config_options)
         
         # Print summary
         self._print_test_summary(episode_rewards, episode_steps)
@@ -140,9 +172,12 @@ class BaseTrainer(ABC):
         print(f"Starting from step: {starting_steps}")
         print(f"Will train for {additional_steps} additional steps")
         
+        # Get initialization options from config
+        config_options = self._get_initialization_options()
+        
         # Create environments
-        env = self._create_environment(init_ranges)
-        eval_env = self._create_environment(init_ranges, for_evaluation=True)
+        env = self._create_environment(config_options)
+        eval_env = self._create_environment(config_options, for_evaluation=True)
         model.set_env(env)
         
         # Update experiment status
@@ -198,9 +233,9 @@ class BaseTrainer(ABC):
         """Load algorithm-specific model - must be implemented by subclasses"""
         pass
     
-    def _create_environment(self, init_ranges=None, render_mode=None, for_evaluation=False):
+    def _create_environment(self, options, render_mode=None, for_evaluation=False):
         """Create environment with appropriate settings"""
-        k = self.cfg.experiment.num_envs
+        k = getattr(self.cfg.experiment, 'num_envs', 1)  # Default to 1 if not specified
         env_import = self.cfg.experiment.env_import
         
         if render_mode is None:
@@ -210,14 +245,56 @@ class BaseTrainer(ABC):
             env_fn=lambda render_mode=render_mode: gym.make(env_import, render_mode=render_mode),
             k=k,
             render_mode=render_mode if not for_evaluation else None,
-            init_ranges=init_ranges
         )
         
         if for_evaluation:
             env = Monitor(env)
         
+        # Reset with options if provided
+        if options is not None:
+            env.reset(options=options)
+        else:
+            env.reset()
+        
         return env
     
+    def _run_test_episodes(self, model, env, num_episodes, options=None):
+        """Run test episodes and collect results"""
+        episode_rewards = []
+        episode_steps = []
+        
+        for episode in range(num_episodes):
+            # Reset with options for each episode
+            if options:
+                obs = env.reset(options=options)
+            else:
+                obs = env.reset()
+                
+            if isinstance(obs, tuple):
+                obs = obs[0]
+            total_reward = 0
+            steps = 0
+            
+            print(f'Started episode {episode + 1}')
+            while True:
+                action, _states = model.predict(obs, deterministic=True)
+                obs, reward, done, truncated, info = env.step(action)
+                
+                env.render()
+                
+                done = done or truncated
+                total_reward += reward
+                steps += 1
+                
+                if done:
+                    print(f"Episode {episode + 1}: {steps} steps, reward: {total_reward}")
+                    episode_rewards.append(total_reward)
+                    episode_steps.append(steps)
+                    break
+        
+        return episode_rewards, episode_steps
+    
+        
     def _create_callbacks(self, experiment_path, eval_env):
         """Create training callbacks"""
         checkpoint_callback = CheckpointCallback(
@@ -234,13 +311,59 @@ class BaseTrainer(ABC):
             best_model_save_path=str(Path(experiment_path) / "models"),
             log_path=str(Path(experiment_path) / "logs"),
             eval_freq=self.cfg.training.eval_freq,
-            deterministic=self.cfg.training.eval_deterministic,
+            deterministic=getattr(self.cfg.training, 'eval_deterministic', True),
             render=False,
             verbose=1,
-            n_eval_episodes=self.cfg.training.n_eval_episodes,
+            n_eval_episodes=getattr(self.cfg.training, 'n_eval_episodes', 5),
         )
         
         return [checkpoint_callback, eval_callback]
+    
+    def _extract_step_count(self, checkpoint_path, model):
+        """Extract step count from checkpoint path or model"""
+        filename = os.path.basename(checkpoint_path)
+        
+        step_patterns = [
+            r'checkpoint_(\d+)_steps',
+            r'final_model_resumed_(\d+)_steps',
+            r'_(\d+)_steps'
+        ]
+        
+        for pattern in step_patterns:
+            match = re.search(pattern, filename)
+            if match:
+                steps = int(match.group(1))
+                print(f"Extracted {steps} steps from filename: {filename}")
+                return steps
+        
+        if hasattr(model, 'num_timesteps'):
+            steps = model.num_timesteps
+            print(f"Using model's internal timestep counter: {steps}")
+            return steps
+        
+        print("Warning: Could not determine starting step count, assuming 0")
+        return 0
+    
+    def _extract_experiment_path_from_model(self, model_path):
+        """Extract experiment path from model file path"""
+        model_path = Path(model_path).resolve()
+        return str(model_path.parent.parent)
+    
+    def _update_resume_status(self, experiment_id, starting_steps, additional_steps):
+        """Update experiment registry for resumed training"""
+        try:
+            self.experiment_manager.update_experiment_status(experiment_id, "resuming")
+        except Exception as e:
+            print(f"Warning: Could not update experiment registry: {e}")
+    
+    def _print_test_summary(self, episode_rewards, episode_steps):
+        """Print testing summary statistics"""
+        print("-" * 50)
+        print("TESTING SUMMARY:")
+        print(f"Average reward: {sum(episode_rewards)/len(episode_rewards):.2f}")
+        print(f"Average steps: {sum(episode_steps)/len(episode_steps):.2f}")
+        print(f"Best reward: {max(episode_rewards):.2f}")
+        print(f"Worst reward: {min(episode_rewards):.2f}")
     
     def _create_resume_callbacks(self, experiment_path, eval_env, starting_steps):
         """Create callbacks for resumed training"""
@@ -278,82 +401,3 @@ class BaseTrainer(ABC):
         )
         
         return [checkpoint_callback, eval_callback]
-    
-    def _run_test_episodes(self, model, env, num_episodes):
-        """Run test episodes and collect results"""
-        episode_rewards = []
-        episode_steps = []
-        
-        for episode in range(num_episodes):
-            obs = env.reset()
-            if isinstance(obs, tuple):
-                obs = obs[0]
-            total_reward = 0
-            steps = 0
-            
-            print(f'Started episode {episode + 1}')
-            while True:
-                action, _states = model.predict(obs, deterministic=True)
-                obs, reward, done, truncated, info = env.step(action)
-                
-                env.render()
-                
-                done = done or truncated
-                total_reward += reward
-                steps += 1
-                
-                if done:
-                    print(f"Episode {episode + 1}: {steps} steps, reward: {total_reward}")
-                    episode_rewards.append(total_reward)
-                    episode_steps.append(steps)
-                    break
-        
-        return episode_rewards, episode_steps
-    
-    def _print_test_summary(self, episode_rewards, episode_steps):
-        """Print testing summary statistics"""
-        print("-" * 50)
-        print("TESTING SUMMARY:")
-        print(f"Average reward: {sum(episode_rewards)/len(episode_rewards):.2f}")
-        print(f"Average steps: {sum(episode_steps)/len(episode_steps):.2f}")
-        print(f"Best reward: {max(episode_rewards):.2f}")
-        print(f"Worst reward: {min(episode_rewards):.2f}")
-    
-    def _extract_step_count(self, checkpoint_path, model):
-        """Extract step count from checkpoint path or model"""
-        filename = os.path.basename(checkpoint_path)
-        
-        # Look for patterns like "checkpoint_50000_steps"
-        step_patterns = [
-            r'checkpoint_(\d+)_steps',
-            r'final_model_resumed_(\d+)_steps',
-            r'_(\d+)_steps'
-        ]
-        
-        for pattern in step_patterns:
-            match = re.search(pattern, filename)
-            if match:
-                steps = int(match.group(1))
-                print(f"Extracted {steps} steps from filename: {filename}")
-                return steps
-        
-        # Fall back to model's internal counter
-        if hasattr(model, 'num_timesteps'):
-            steps = model.num_timesteps
-            print(f"Using model's internal timestep counter: {steps}")
-            return steps
-        
-        print("Warning: Could not determine starting step count, assuming 0")
-        return 0
-    
-    def _extract_experiment_path_from_model(self, model_path):
-        """Extract experiment path from model file path"""
-        model_path = Path(model_path).resolve()
-        return str(model_path.parent.parent)
-    
-    def _update_resume_status(self, experiment_id, starting_steps, additional_steps):
-        """Update experiment registry for resumed training"""
-        try:
-            self.experiment_manager.update_experiment_status(experiment_id, "resuming")
-        except Exception as e:
-            print(f"Warning: Could not update experiment registry: {e}")

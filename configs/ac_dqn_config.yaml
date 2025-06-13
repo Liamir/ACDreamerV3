@@ -4,9 +4,10 @@ experiment:
   description: "DQN on MountainCar"
   save_path: "./runs"
   num_envs: 4
-  init_low: -0.6
-  init_high: -0.4
-  
+  # Custom initialization ranges (optional)
+  init_low: -1.0
+  init_high: -0.0
+
   # Environment-specific settings
   custom_params:
     goal_velocity: 0.0
