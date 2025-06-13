@@ -6,7 +6,7 @@ import time
 import math
 import logging
 from custom_envs import env_register
-from custom_envs.continuous_cartpole_v4 import ContinuousCartPoleEnv  # Adjust import as needed
+from custom_envs.continuous_cartpole_v4 import ContinuousCartPoleEnv
 from gym.spaces.box import Box as GymBox
 
 # Set up logging
@@ -20,9 +20,9 @@ class ActionCoupledWrapper(Wrapper):
         'render_fps': 50,
     }
     
-    def __init__(self, env_fn, k: int, seed=None, seeds=None, init_ranges=None, render_mode=None):
+    def __init__(self, env_fn, k: int, seed=None, seeds=None, render_mode=None):
         """
-        Initialize the ActionCoupledWrapper with controlled randomization and initial state.
+        Initialize the ActionCoupledWrapper with controlled randomization.
         
         Args:
             env_fn: Function that creates a gym environment
@@ -31,12 +31,10 @@ class ActionCoupledWrapper(Wrapper):
                   environments will use seed, seed+1, seed+2, etc.
             seeds: List of specific seeds for each environment. If provided, overrides seed parameter.
                   Must have length k.
-            init_ranges: Dictionary mapping state variable names to (min, max) tuples specifying
-                        the initialization range for each variable.
             render_mode: Render mode for all environments ('human', 'rgb_array', or None)
         """
+        
         self.k = k
-        self.init_ranges = init_ranges
         self._render_mode = render_mode
         self._metadata = None
 
@@ -64,14 +62,13 @@ class ActionCoupledWrapper(Wrapper):
 
         for i in range(k):
             # Always create individual environments with rgb_array mode
-            # so they don't create their own display windows
             try:
                 env = env_fn(render_mode="rgb_array")
             except TypeError:
                 # Fallback if env_fn doesn't accept render_mode parameter
                 env = env_fn()
                 if hasattr(env, 'render_mode'):
-                    env.render_mode = "rgb_array"  # Force rgb_array mode
+                    env.render_mode = "rgb_array"
 
             # Seed the environment
             if self.seeds and hasattr(env, 'seed'):
@@ -88,7 +85,7 @@ class ActionCoupledWrapper(Wrapper):
         self.action_space = self.envs[0].action_space
                 
         # Create a stacked observation space (concatenate all observations)
-        if isinstance(single_obs_space, gym.spaces.Box) or isinstance(single_obs_space, GymBox):
+        if isinstance(single_obs_space, (gym.spaces.Box, GymBox)):
             # For Box spaces, multiply the shape by k (number of environments)
             low = np.tile(single_obs_space.low, k)
             high = np.tile(single_obs_space.high, k)
@@ -109,11 +106,51 @@ class ActionCoupledWrapper(Wrapper):
         # For logging purposes
         if self.seeds:
             logging.info(f"Initialized environments with seeds: {self.seeds}")
-        if self.init_ranges:
-            logging.info(f"Using custom initialization ranges: {self.init_ranges}")
             
-        # Reset immediately to apply seeds and init ranges
+        # Reset immediately to apply seeds
         self.reset(seed=seed)
+    
+
+    def _create_environment_options(self, init_low, init_high):
+        """
+        Create environment-specific options from base options and init ranges.
+        """
+        
+        options = {}
+        
+        # Add initialization ranges if provided
+        if init_low is not None:
+            options['low'] = init_low
+        if init_high is not None:
+            options['high'] = init_high
+        
+        if init_high is not None or init_low is not None:
+            return options
+        else:
+            return None
+            
+    
+    def _sample_from_ranges(self, init_low, init_high, variable_name):
+        """
+        Sample a value from the specified range for a given variable.
+        
+        Args:
+            init_low: Dict of low values
+            init_high: Dict of high values  
+            variable_name: Name of the variable to sample
+            
+        Returns:
+            Sampled value or None if variable not in ranges
+        """
+        if init_low is None or init_high is None:
+            return None
+            
+        if variable_name in init_low and variable_name in init_high:
+            low = init_low[variable_name]
+            high = init_high[variable_name]
+            return self.rng.uniform(low, high)
+            
+        return None
     
     def _setup_rendering(self):
         """Setup rendering parameters based on the number of environments."""
@@ -186,55 +223,114 @@ class ActionCoupledWrapper(Wrapper):
         spec = getattr(self.envs[0], "spec", None)
         return spec.id if spec else "unknown_env"
         
-    def reset(self, seed=None, options=None, init_ranges=None, **kwargs):
-        """Reset all environments and return stacked observation."""
-        self.terminated_envs = [False] * self.k  # Reset the terminated states
+    def reset(self, options=None, seed=None, **kwargs):
+        """
+        Reset all environments with support for custom initialization ranges.
+        
+        Args:
+            seed: Master seed for all environments
+            options: Dict of options that can include:
+                - init_low: Dict mapping state variables to low values
+                - init_high: Dict mapping state variables to high values
+                - Any other environment-specific options
+        """
+
+        self.terminated_envs = [False] * self.k
         
         # Update seeds if a new master seed is provided
         if seed is not None:
             self.master_seed = seed
             self.rng = np.random.RandomState(seed)
-            np.random.seed(seed)  # Set global numpy seed as well
+            np.random.seed(seed)
             
             if self.seeds is not None:
                 self.seeds = [seed + i for i in range(self.k)]
                 logging.info(f"Updated environment seeds to: {self.seeds}")
+            
+            # # Also check for direct range specifications
+            # if 'low' in options and 'high' in options:
+            #     # For environments like MountainCar that use low/high directly
+            #     pass  # Keep the original options
         
-        # Update initialization ranges if provided
-        ranges_to_use = init_ranges if init_ranges is not None else self.init_ranges
-        
-        # Reset environments with appropriate seeds and initial states
+        # Reset environments
         observations = []
         for i, env in enumerate(self.envs):
             reset_seed = None if self.seeds is None else self.seeds[i]
             
-            # Reset the environment
+            # Seed the environment
             if hasattr(env, 'seed') and reset_seed is not None:
                 env.seed(reset_seed)
             
-            options = {
-                'low': -1.0,
-                'high': 0.4,
-            }
-
             # Reset and get observation
-            obs = env.reset(options=options)
+            try:
+                result = env.reset(seed=reset_seed, options=options)
+            except TypeError:
+                # Fallback for environments that don't support options
+                print(f'Failed to automatically set the initial state ranges. Trying to set them manually.')
+                result = env.reset(seed=reset_seed)
+                
+                # Apply manual initialization if ranges provided
+                if options is not None:
+                    self._apply_manual_initialization(env, options)
+                    result = self._get_observation_after_state_change(env)
             
-            # Handle different return formats (gymnasium vs gym)
-            if isinstance(obs, tuple):
-                obs = obs[0]  # New gymnasium format returns (obs, info)
-            
-            # Then apply custom initialization if ranges specified
-            if ranges_to_use is not None:
-                self._set_custom_initial_state(env, ranges_to_use)
-                # Get updated observation after state modification
-                obs = self._construct_obs_from_state(env)
+            # Handle different return formats
+            if isinstance(result, tuple):
+                obs = result[0]  # (obs, info) format
+            else:
+                obs = result  # Just obs
                 
             observations.append(obs)
         
         # Stack all observations into a single vector
         stacked_obs = np.concatenate(observations)
         return stacked_obs, {}
+    
+    def _apply_manual_initialization(self, env, options):
+        """
+        Manually apply initialization ranges for environments that don't support options.
+        This is a fallback method for older environments.
+        """
+        env_type = type(env.unwrapped).__name__.lower()
+        
+        if 'cartpole' in env_type:
+            if hasattr(env.unwrapped, 'state'):
+                state = np.array(env.unwrapped.state)
+                
+                # Sample new values for specified variables
+                for i, var_name in enumerate(['x', 'x_dot', 'theta', 'theta_dot']):
+                    new_val = self._sample_from_ranges(options['init_low'], options['init_high'], var_name)
+                    if new_val is not None:
+                        state[i] = new_val
+                
+                env.unwrapped.state = state
+                
+        elif 'mountaincar' in env_type:
+            if hasattr(env.unwrapped, 'state'):
+                state = np.array(env.unwrapped.state)
+                
+                # Sample new values for MountainCar variables  
+                for i, var_name in enumerate(['position', 'velocity']):
+                    new_val = self._sample_from_ranges(options['init_low'], options['init_high'], var_name)
+                    if new_val is not None:
+                        state[i] = new_val
+                
+                env.unwrapped.state = state
+        
+        # Reset steps_beyond_done if it exists
+        if hasattr(env.unwrapped, 'steps_beyond_done'):
+            env.unwrapped.steps_beyond_done = None
+    
+    def _get_observation_after_state_change(self, env):
+        """Get observation after manually changing environment state."""
+        env_type = type(env.unwrapped).__name__.lower()
+        
+        # For most environments, the observation is just the state
+        if hasattr(env.unwrapped, 'state') and env.unwrapped.state is not None:
+            return np.array(env.unwrapped.state, dtype=np.float32)
+        
+        # Fallback
+        return env.observation_space.sample()
         
     def step(self, action):
         obs, rewards, dones, truncs, infos = [], [], [], [], []
