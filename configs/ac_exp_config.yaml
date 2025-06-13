@@ -45,15 +45,15 @@ algorithm:
   sde_sample_freq: -1
 
 training:
-  timesteps: 200000   # used for train and resume
+  timesteps: 2000   # used for train and resume
   
   # Evaluation during training
-  eval_freq: 40000
+  eval_freq: 400
   n_eval_episodes: 5
   eval_deterministic: true
   
   # Checkpointing
-  save_freq: 40000
+  save_freq: 400
   save_best_model: true
   
   # Early stopping

@@ -6,7 +6,21 @@ Simple orchestrator that coordinates all components
 import sys
 from .utils.cli import create_argument_parser, load_config_with_cli_overrides, print_configuration_summary
 from .trainers.ppo_trainer import PPOTrainer
+from .trainers.dqn_trainer import DQNTrainer
 from .core.experiment import ExperimentManager
+
+
+def create_trainer(cfg):
+    """Factory function to create the appropriate trainer based on algorithm"""
+    algorithm = cfg.algorithm.name.lower()
+    
+    if algorithm == "ppo":
+        return PPOTrainer(cfg)
+    elif algorithm == "dqn":
+        return DQNTrainer(cfg)
+    else:
+        supported_algorithms = ["ppo", "dqn"]
+        raise ValueError(f"Unsupported algorithm: {algorithm}. Supported: {supported_algorithms}")
 
 
 def main():
@@ -55,44 +69,30 @@ def main():
 
 def handle_train_command(cfg, args):
     """Handle train command"""
-    print("\n🚀 Starting Training...")
+    print(f"\n🚀 Starting {cfg.algorithm.name} Training...")
     
-    # Create trainer based on algorithm
-    if cfg.algorithm.name.lower() == "ppo":
-        trainer = PPOTrainer(cfg)
-        trainer.train()
-    else:
-        raise ValueError(f"Unsupported algorithm: {cfg.algorithm.name}")
+    trainer = create_trainer(cfg)
+    trainer.train()
     
     print("✅ Training completed successfully!")
 
 
 def handle_test_command(cfg, args):
     """Handle test command"""
-    print("\n🧪 Starting Testing...")
+    print(f"\n🧪 Starting {cfg.algorithm.name} Testing...")
     
-    # Create trainer based on algorithm
-    if cfg.algorithm.name.lower() == "ppo":
-        trainer = PPOTrainer(cfg)
-        trainer.test(
-            model_path=args.model_path,
-        )
-    else:
-        raise ValueError(f"Unsupported algorithm: {cfg.algorithm.name}")
+    trainer = create_trainer(cfg)
+    trainer.test(model_path=args.model_path)
     
     print("✅ Testing completed!")
 
 
 def handle_resume_command(cfg, args):
     """Handle resume command"""
-    print("\n🔄 Resuming Training...")
+    print(f"\n🔄 Resuming {cfg.algorithm.name} Training...")
     
-    # Create trainer based on algorithm
-    if cfg.algorithm.name.lower() == "ppo":
-        trainer = PPOTrainer(cfg)
-        trainer.resume(model_path=args.model_path)
-    else:
-        raise ValueError(f"Unsupported algorithm: {cfg.algorithm.name}")
+    trainer = create_trainer(cfg)
+    trainer.resume(model_path=args.model_path)
     
     print("✅ Resume training completed!")
 

@@ -1,9 +1,11 @@
 experiment:
   env_import: "CustomMountainCar-v0"
   name: "hp1"
-  description: "PPO on MountainCar"
+  description: "DQN on MountainCar"
   save_path: "./runs"
-  num_envs: 1
+  num_envs: 4
+  init_low: -0.6
+  init_high: -0.4
   
   # Environment-specific settings
   custom_params:
@@ -19,21 +21,21 @@ experiment:
       n_stack: 1
 
 algorithm:
-  name: "PPO"
+  name: "DQN"
   
   # Core hyperparameters
   hyperparameters:
-    learning_rate: 1.0e-3
-    batch_size: 256
-    n_epochs: 4
-    n_steps: 1024
-    gamma: 0.999
-    gae_lambda: 0.98
-    clip_range: 0.1
-    clip_range_vf: null
-    ent_coef: 0.01
-    vf_coef: 0.5
-    max_grad_norm: 0.5
+    learning_rate: 0.001
+    buffer_size: 50000
+    learning_starts: 1000
+    batch_size: 128
+    target_update_interval: 600
+    train_freq: 4
+    gradient_steps: 1
+    exploration_fraction: 0.3
+    exploration_initial_eps: 1.0
+    exploration_final_eps: 0.02
+    gamma: 0.99
   
   # Network architecture
   policy_kwargs:
@@ -45,15 +47,15 @@ algorithm:
   sde_sample_freq: -1
 
 training:
-  timesteps: 200000   # used for train and resume
+  timesteps: 100000   # used for train and resume
   
   # Evaluation during training
-  eval_freq: 40000
+  eval_freq: 25000
   n_eval_episodes: 5
   eval_deterministic: true
   
   # Checkpointing
-  save_freq: 40000
+  save_freq: 25000
   save_best_model: true
   
   # Early stopping

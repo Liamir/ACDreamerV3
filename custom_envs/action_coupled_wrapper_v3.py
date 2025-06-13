@@ -212,8 +212,13 @@ class ActionCoupledWrapper(Wrapper):
             if hasattr(env, 'seed') and reset_seed is not None:
                 env.seed(reset_seed)
             
+            options = {
+                'low': -1.0,
+                'high': 0.4,
+            }
+
             # Reset and get observation
-            obs = env.reset()
+            obs = env.reset(options=options)
             
             # Handle different return formats (gymnasium vs gym)
             if isinstance(obs, tuple):
@@ -278,11 +283,11 @@ class ActionCoupledWrapper(Wrapper):
         stacked_obs = np.concatenate(obs)
 
         # End episode if at least half of the envs have finished
-        done = sum(done_flags) >= self.k - self.k // 2
+        # done = sum(done_flags) >= self.k - self.k // 2
         # number of live envs
         # negative sum of angles in absolute value
 
-        return stacked_obs, np.sum(rewards), done, False, {"individual_rewards": rewards, "infos": infos}
+        return stacked_obs, np.sum(rewards), all(dones), False, {"individual_rewards": rewards, "infos": infos}
     
     def render(self):
         """Render all environments in a grid layout."""
