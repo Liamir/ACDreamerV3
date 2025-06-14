@@ -1,4 +1,5 @@
 experiment:
+  # env_import: "CustomMountainCar-v0"
   env_import: "CustomMountainCar-v0"
   name: "hp1"
   description: "PPO on MountainCar"

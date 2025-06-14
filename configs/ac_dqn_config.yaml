@@ -1,12 +1,12 @@
 experiment:
   env_import: "CustomMountainCar-v0"
   name: "hp1"
-  description: "DQN on MountainCar"
+  description: "DQN Experiment"
   save_path: "./runs"
-  num_envs: 4
+  num_envs: 1
   # Custom initialization ranges (optional)
-  init_low: -1.0
-  init_high: -0.0
+  # init_low: -1.0
+  # init_high: -0.0
 
   # Environment-specific settings
   custom_params:
@@ -84,7 +84,7 @@ logging:
 # Testing/evaluation settings
 evaluation:
   episodes: 3
-  model_type: "final"
+  model_type: "best"
   deterministic: true
   render_mode: "rgb_array"
   save_trajectories: false

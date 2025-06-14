@@ -83,20 +83,26 @@ class ActionCoupledWrapper(Wrapper):
         # Set up observation and action spaces
         single_obs_space = self.envs[0].observation_space
         self.action_space = self.envs[0].action_space
+
+        # print(f'Observation space for a single env is: {single_obs_space}')
                 
         # Create a stacked observation space (concatenate all observations)
-        if isinstance(single_obs_space, (gym.spaces.Box, GymBox)):
-            # For Box spaces, multiply the shape by k (number of environments)
-            low = np.tile(single_obs_space.low, k)
-            high = np.tile(single_obs_space.high, k)
-            self.observation_space = gym.spaces.Box(
-                low=low, 
-                high=high, 
-                dtype=single_obs_space.dtype
-            )
-        else:
-            # For other space types, you might need different handling
-            raise NotImplementedError(f"Stacking not implemented for {type(single_obs_space)} spaces")
+        # if isinstance(single_obs_space, (gym.spaces.Box, GymBox)):
+        #     # For Box spaces, multiply the shape by k (number of environments)
+        #     low = np.tile(single_obs_space.low, k)
+        #     high = np.tile(single_obs_space.high, k)
+        #     self.observation_space = gym.spaces.Box(
+        #         low=low, 
+        #         high=high, 
+        #         dtype=single_obs_space.dtype
+        #     )
+        # else:
+        #     # For other space types, you might need different handling
+        #     raise NotImplementedError(f"Stacking not implemented for {type(single_obs_space)} spaces")
+
+        self.observation_space = self._create_stacked_observation_space(single_obs_space, k)
+    
+        # print(f"Created stacked observation space: {self.observation_space}")
         
         self.terminated_envs = [False] * k  # Track terminated state for each environment
         
@@ -110,6 +116,152 @@ class ActionCoupledWrapper(Wrapper):
         # Reset immediately to apply seeds
         self.reset(seed=seed)
     
+
+    def _create_stacked_observation_space(self, single_obs_space, k):
+        """
+        Create a stacked observation space that handles multiple space types.
+        
+        Args:
+            single_obs_space: Observation space from a single environment
+            k: Number of environments to stack
+            
+        Returns:
+            Flattened Box space containing stacked observations
+        """
+        
+        if isinstance(single_obs_space, gym.spaces.Box):
+            # Handle Box spaces (most common case)
+            low = np.tile(single_obs_space.low, k)
+            high = np.tile(single_obs_space.high, k)
+            return gym.spaces.Box(low=low, high=high, dtype=single_obs_space.dtype)
+        
+        elif isinstance(single_obs_space, gym.spaces.Dict):
+            # Handle Dict spaces (like MiniGrid)
+            return self._handle_dict_obs_space(single_obs_space, k)
+        
+        elif isinstance(single_obs_space, gym.spaces.Discrete):
+            # Handle Discrete spaces by converting to Box
+            # Each discrete obs becomes a one-hot vector
+            n_values = single_obs_space.n
+            total_size = k * n_values
+            return gym.spaces.Box(
+                low=0, high=1, shape=(total_size,), dtype=np.float32
+            )
+        
+        elif isinstance(single_obs_space, gym.spaces.MultiDiscrete):
+            # Handle MultiDiscrete spaces
+            total_size = k * len(single_obs_space.nvec)
+            max_val = np.max(single_obs_space.nvec)
+            return gym.spaces.Box(
+                low=0, high=max_val-1, shape=(total_size,), dtype=np.int64
+            )
+        
+        elif isinstance(single_obs_space, gym.spaces.Tuple):
+            # Handle Tuple spaces by flattening each component
+            flattened_size = 0
+            for space in single_obs_space.spaces:
+                flattened_size += self._get_flattened_size(space)
+            
+            total_size = k * flattened_size
+            return gym.spaces.Box(
+                low=-np.inf, high=np.inf, shape=(total_size,), dtype=np.float32
+            )
+        
+        else:
+            # Fallback: try to flatten whatever we get
+            try:
+                sample = single_obs_space.sample()
+                flattened_sample = self._flatten_observation(sample)
+                total_size = k * len(flattened_sample)
+                return gym.spaces.Box(
+                    low=-np.inf, high=np.inf, shape=(total_size,), dtype=np.float32
+                )
+            except:
+                raise NotImplementedError(
+                    f"Stacking not implemented for {type(single_obs_space)} spaces. "
+                    f"Consider adding support for this space type."
+                )
+            
+
+    def _handle_dict_obs_space(self, dict_space, k):
+        """Handle Dictionary observation spaces (like MiniGrid)"""
+        
+        # Strategy 2: Flatten and concatenate all dict values
+        total_size = 0
+        for key, space in dict_space.spaces.items():
+            if key == 'mission':  # Skip text-based mission space
+                continue
+            try:
+                space_size = self._get_flattened_size(space)
+                total_size += space_size
+            except:
+                print(f"  Skipping dict key '{key}': cannot determine size")
+        
+        if total_size > 0:
+            final_size = k * total_size
+            
+            return gym.spaces.Box(
+                low=-np.inf, high=np.inf, shape=(final_size,), dtype=np.float32
+            )
+        
+
+    def _get_flattened_size(self, space):
+        """Get the size of a flattened observation from a space"""
+        if isinstance(space, gym.spaces.Box):
+            return np.prod(space.shape)
+        elif isinstance(space, gym.spaces.Discrete):
+            return 1   # We represent discrete as a single float value (not one-hot)
+        elif isinstance(space, gym.spaces.MultiDiscrete):
+            return len(space.nvec)
+        elif isinstance(space, gym.spaces.Tuple):
+            return sum(self._get_flattened_size(s) for s in space.spaces)
+        else:
+            # Try sampling to determine size
+            try:
+                sample = space.sample()
+                flattened = self._flatten_observation(sample)
+                return len(flattened)
+            except:
+                return 64  # Reasonable default
+
+    def _flatten_observation(self, obs):
+        """Flatten any observation to a 1D numpy array"""
+        if isinstance(obs, dict):
+            # For dict observations, concatenate non-text values
+            flattened_parts = []
+            for key, value in obs.items():
+                if key == 'mission':  # Skip text mission
+                    continue
+                try:
+                    flat_part = self._flatten_observation(value)
+                    flattened_parts.append(flat_part)
+                except:
+                    continue
+            
+            if flattened_parts:
+                return np.concatenate(flattened_parts)
+            else:
+                return np.array([0.0])  # Fallback
+        
+        elif isinstance(obs, (list, tuple)):
+            # Flatten sequences
+            flattened_parts = [self._flatten_observation(item) for item in obs]
+            return np.concatenate(flattened_parts)
+        
+        elif isinstance(obs, np.ndarray):
+            return obs.flatten().astype(np.float32)
+        
+        elif isinstance(obs, (int, float)):
+            return np.array([float(obs)])
+        
+        else:
+            # Try to convert to numpy and flatten
+            try:
+                return np.array(obs).flatten().astype(np.float32)
+            except:
+                # Last resort: return a zero
+                return np.array([0.0])
+
 
     def _create_environment_options(self, init_low, init_high):
         """
@@ -279,12 +431,25 @@ class ActionCoupledWrapper(Wrapper):
                 obs = result[0]  # (obs, info) format
             else:
                 obs = result  # Just obs
+            
+            flattened_obs = self._flatten_observation(obs)
+            observations.append(flattened_obs)
                 
-            observations.append(obs)
-        
         # Stack all observations into a single vector
         stacked_obs = np.concatenate(observations)
-        return stacked_obs, {}
+
+        # Ensure the stacked observation matches our observation space
+        expected_size = self.observation_space.shape[0]
+        if len(stacked_obs) != expected_size:
+            print(f"Warning: Stacked obs size {len(stacked_obs)} != expected {expected_size}")
+            # Pad or truncate to match expected size
+            if len(stacked_obs) < expected_size:
+                padding = np.zeros(expected_size - len(stacked_obs))
+                stacked_obs = np.concatenate([stacked_obs, padding])
+            else:
+                stacked_obs = stacked_obs[:expected_size]
+
+        return stacked_obs.astype(np.float32), {}
     
     def _apply_manual_initialization(self, env, options):
         """
@@ -350,8 +515,9 @@ class ActionCoupledWrapper(Wrapper):
                     else:
                         # New gymnasium format: (obs, reward, terminated, truncated, info)
                         o, r, d, t, i_info = result
-                    
-                obs.append(o)
+                
+                flattened_obs = self._flatten_observation(o)
+                obs.append(flattened_obs)
                 rewards.append(r)
                 dones.append(d)
                 truncs.append(t)
@@ -361,29 +527,34 @@ class ActionCoupledWrapper(Wrapper):
                 if d or t:
                     self.terminated_envs[i] = True
             else:
-                # For already terminated environments, return zero observation
-                zero_obs = np.zeros_like(self.envs[i].observation_space.sample())
-                obs.append(zero_obs)
+                # For terminated environments, create zero observation
+                if not hasattr(self, '_zero_obs_size'):
+                    # Calculate zero observation size from observation space
+                    single_env_obs_size = self.observation_space.shape[0] // self.k
+                    self._zero_obs_size = single_env_obs_size
+                    self._zero_obs = np.zeros(single_env_obs_size, dtype=np.float32)
+                
+                obs.append(self._zero_obs)
                 rewards.append(0)
                 dones.append(True)
                 truncs.append(True)
                 infos.append({})
         
+        # Stack observations into a single vector
+        stacked_obs = np.concatenate(obs)
+
         done_flags = [d or t for d, t in zip(dones, truncs)]
         # Log number of active environments
         active_envs = sum(1 for d in self.terminated_envs if not d)
         if active_envs < self.k:  # Only log when some environments are done
             logging.info(f"Active environments: {active_envs}")
-        
-        # Stack observations into a single vector
-        stacked_obs = np.concatenate(obs)
 
         # End episode if at least half of the envs have finished
         # done = sum(done_flags) >= self.k - self.k // 2
         # number of live envs
         # negative sum of angles in absolute value
 
-        return stacked_obs, np.sum(rewards), all(dones), False, {"individual_rewards": rewards, "infos": infos}
+        return stacked_obs.astype(np.float32), np.sum(rewards), all(done_flags), False, {"individual_rewards": rewards, "infos": infos}
     
     def render(self):
         """Render all environments in a grid layout."""

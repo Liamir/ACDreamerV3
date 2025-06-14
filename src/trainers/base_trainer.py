@@ -7,8 +7,10 @@ import re
 import gymnasium as gym
 from stable_baselines3.common.callbacks import CheckpointCallback, EvalCallback
 from stable_baselines3.common.monitor import Monitor
+import minigrid
 from pathlib import Path
 from abc import ABC, abstractmethod
+import traceback
 
 # Import custom environments and wrappers
 import sys
@@ -98,9 +100,15 @@ class BaseTrainer(ABC):
             
             self.experiment_manager.update_experiment_status(experiment_id, "completed")
             
+        # except Exception as e:
+        #     print(f"Training failed: {e}")
+        #     self.experiment_manager.update_experiment_status(experiment_id, "failed", {"error": str(e)})
+        #     raise
+
         except Exception as e:
-            print(f"Training failed: {e}")
-            self.experiment_manager.update_experiment_status(experiment_id, "failed", {"error": str(e)})
+            error_message = traceback.format_exc()
+            print(f"Training failed with traceback:\n{error_message}")
+            self.experiment_manager.update_experiment_status(experiment_id, "failed", {"error": error_message})
             raise
         
         return model
