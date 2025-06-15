@@ -4,13 +4,11 @@ experiment:
   description: "DQN Experiment"
   save_path: "./runs"
   num_envs: 4
-  # Custom initialization ranges (optional)
-  # init_low: -0.5
-  # init_high: -0.5
   
 environment:
-  # init_low: 0.0
-  # init_high: 0.0
+  init_low: -1.2
+  init_high: 0.4
+  # Custom initialization ranges (optional)
   reward_type: "min"  # min / mean / sum
   termination_type: "all"  # first / half / all
 

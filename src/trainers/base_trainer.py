@@ -33,9 +33,9 @@ class BaseTrainer(ABC):
         options = {}
         
         # Check if initialization ranges are specified in config
-        if hasattr(self.cfg.experiment, 'init_low') and hasattr(self.cfg.experiment, 'init_high'):
-            init_low = getattr(self.cfg.experiment, 'init_low', None)
-            init_high = getattr(self.cfg.experiment, 'init_high', None)
+        if hasattr(self.cfg.environment, 'init_low') and hasattr(self.cfg.environment, 'init_high'):
+            init_low = getattr(self.cfg.environment, 'init_low', None)
+            init_high = getattr(self.cfg.environment, 'init_high', None)
             
             if init_low is not None and init_high is not None:
                 options['low'] = dict(init_low) if hasattr(init_low, '_asdict') else init_low
