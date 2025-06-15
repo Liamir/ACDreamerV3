@@ -3,10 +3,16 @@ experiment:
   name: "hp1"
   description: "DQN Experiment"
   save_path: "./runs"
-  num_envs: 1
+  num_envs: 4
   # Custom initialization ranges (optional)
-  # init_low: -1.0
-  # init_high: -0.0
+  # init_low: -0.5
+  # init_high: -0.5
+  
+environment:
+  # init_low: 0.0
+  # init_high: 0.0
+  reward_type: "min"  # min / mean / sum
+  termination_type: "all"  # first / half / all
 
   # Environment-specific settings
   custom_params:
@@ -48,15 +54,15 @@ algorithm:
   sde_sample_freq: -1
 
 training:
-  timesteps: 100000   # used for train and resume
+  timesteps: 200000   # used for train and resume
   
   # Evaluation during training
-  eval_freq: 25000
+  eval_freq: 15000
   n_eval_episodes: 5
   eval_deterministic: true
   
   # Checkpointing
-  save_freq: 25000
+  save_freq: 15000
   save_best_model: true
   
   # Early stopping

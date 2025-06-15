@@ -20,7 +20,7 @@ class ActionCoupledWrapper(Wrapper):
         'render_fps': 50,
     }
     
-    def __init__(self, env_fn, k: int, seed=None, seeds=None, render_mode=None):
+    def __init__(self, env_fn, k: int, seed=None, seeds=None, render_mode=None, options=None):
         """
         Initialize the ActionCoupledWrapper with controlled randomization.
         
@@ -56,7 +56,10 @@ class ActionCoupledWrapper(Wrapper):
             self.seeds = [seed + i for i in range(k)]
         else:
             self.seeds = None
-            
+
+        self.reward_type = options.get('reward_type', 'min')
+        self.termination_type = options.get('termination_type', 'first')
+
         # Create environments with specific seeds and render mode
         self.envs = []
 
@@ -83,27 +86,7 @@ class ActionCoupledWrapper(Wrapper):
         # Set up observation and action spaces
         single_obs_space = self.envs[0].observation_space
         self.action_space = self.envs[0].action_space
-
-        # print(f'Observation space for a single env is: {single_obs_space}')
-                
-        # Create a stacked observation space (concatenate all observations)
-        # if isinstance(single_obs_space, (gym.spaces.Box, GymBox)):
-        #     # For Box spaces, multiply the shape by k (number of environments)
-        #     low = np.tile(single_obs_space.low, k)
-        #     high = np.tile(single_obs_space.high, k)
-        #     self.observation_space = gym.spaces.Box(
-        #         low=low, 
-        #         high=high, 
-        #         dtype=single_obs_space.dtype
-        #     )
-        # else:
-        #     # For other space types, you might need different handling
-        #     raise NotImplementedError(f"Stacking not implemented for {type(single_obs_space)} spaces")
-
         self.observation_space = self._create_stacked_observation_space(single_obs_space, k)
-    
-        # print(f"Created stacked observation space: {self.observation_space}")
-        
         self.terminated_envs = [False] * k  # Track terminated state for each environment
         
         # Rendering setup
@@ -554,7 +537,25 @@ class ActionCoupledWrapper(Wrapper):
         # number of live envs
         # negative sum of angles in absolute value
 
-        return stacked_obs.astype(np.float32), np.sum(rewards), all(done_flags), False, {"individual_rewards": rewards, "infos": infos}
+        if self.reward_type == 'min':
+            reward = np.min(rewards)
+        elif self.reward_type == 'mean':
+            reward = np.mean(rewards)
+        elif self.reward_type == 'sum':
+            reward = np.sum(rewards)
+        else:
+            print(f'Warning: reward type: {self.reward_type} not supported.')
+
+        if self.termination_type == 'first':
+            done = any(done_flags)
+        elif self.termination_type == 'half':
+            done = sum(done_flags) >= self.k - self.k // 2
+        elif self.termination_type == 'all':
+            done = all(done_flags)
+        else:
+            print(f'Warning: termination type: {self.termination_type} not supported.')
+
+        return stacked_obs.astype(np.float32), reward, done, False, {"individual_rewards": rewards, "infos": infos}
     
     def render(self):
         """Render all environments in a grid layout."""

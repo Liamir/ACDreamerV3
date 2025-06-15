@@ -28,7 +28,7 @@ class BaseTrainer(ABC):
         self.cfg = cfg
         self.experiment_manager = ExperimentManager(cfg.experiment.save_path)
     
-    def _get_initialization_options(self):
+    def _get_environment_options(self):
         """Extract initialization options from config"""
         options = {}
         
@@ -45,12 +45,13 @@ class BaseTrainer(ABC):
                 print(f"  Low: {options['low']}")
                 print(f"  High: {options['high']}")
         
-        # Check for other environment-specific options
-        if hasattr(self.cfg.experiment, 'env_options'):
-            env_options = getattr(self.cfg.experiment, 'env_options', {})
-            if env_options:
-                options.update(dict(env_options) if hasattr(env_options, '_asdict') else env_options)
-                print(f"Using additional environment options: {env_options}")
+        if hasattr(self.cfg.environment, 'reward_type'):
+            reward_type = getattr(self.cfg.environment, 'reward_type')
+            options['reward_type'] = reward_type
+
+        if hasattr(self.cfg.environment, 'termination_type'):
+            termination_type = getattr(self.cfg.environment, 'termination_type')
+            options['termination_type'] = termination_type
         
         return options if options else None
 
@@ -69,7 +70,7 @@ class BaseTrainer(ABC):
         
         try:
             # Get initialization options from config (prefer this over init_ranges parameter)
-            config_options = self._get_initialization_options()
+            config_options = self._get_environment_options()
             
             # Create environments with config-based options
             env = self._create_environment(config_options)
@@ -133,7 +134,7 @@ class BaseTrainer(ABC):
             return
         
         # Get initialization options from config
-        config_options = self._get_initialization_options()
+        config_options = self._get_environment_options()
         
         # Create test environment
         env = self._create_environment(config_options, render_mode="human")
@@ -181,7 +182,7 @@ class BaseTrainer(ABC):
         print(f"Will train for {additional_steps} additional steps")
         
         # Get initialization options from config
-        config_options = self._get_initialization_options()
+        config_options = self._get_environment_options()
         
         # Create environments
         env = self._create_environment(config_options)
@@ -253,6 +254,7 @@ class BaseTrainer(ABC):
             env_fn=lambda render_mode=render_mode: gym.make(env_import, render_mode=render_mode),
             k=k,
             render_mode=render_mode if not for_evaluation else None,
+            options=options,
         )
         
         if for_evaluation:
