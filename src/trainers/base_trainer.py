@@ -7,7 +7,6 @@ import re
 import gymnasium as gym
 from stable_baselines3.common.callbacks import CheckpointCallback, EvalCallback
 from stable_baselines3.common.monitor import Monitor
-import minigrid
 from pathlib import Path
 from abc import ABC, abstractmethod
 import traceback
@@ -17,6 +16,7 @@ import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 import custom_envs
 from custom_envs.action_coupled_wrapper_v3 import ActionCoupledWrapper
+from custom_envs.normalization_wrapper import NormalizationWrapper  # Add this import at top
 
 from ..core.experiment import ExperimentManager, print_env_info
 
@@ -56,7 +56,7 @@ class BaseTrainer(ABC):
         return options if options else None
 
     
-    def train(self, init_ranges=None):
+    def train(self):
         """Train model with checkpoints and evaluation"""
         print(f"Starting {self.cfg.algorithm.name} training for {self.cfg.training.timesteps} steps")
         
@@ -114,7 +114,7 @@ class BaseTrainer(ABC):
         
         return model
     
-    def test(self, model_path=None, init_ranges=None):
+    def test(self, model_path=None):
         """Test a trained model"""
         num_episodes = self.cfg.evaluation.episodes
 
@@ -153,7 +153,7 @@ class BaseTrainer(ABC):
         env.close()
         return episode_rewards, episode_steps
     
-    def resume(self, model_path=None, init_ranges=None):
+    def resume(self, model_path=None):
         """Resume training from a checkpoint"""
         additional_steps = self.cfg.training.timesteps
         
@@ -241,10 +241,10 @@ class BaseTrainer(ABC):
     def _load_model(self, checkpoint_path):
         """Load algorithm-specific model - must be implemented by subclasses"""
         pass
-    
+
     def _create_environment(self, options, render_mode=None, for_evaluation=False):
         """Create environment with appropriate settings"""
-        k = getattr(self.cfg.experiment, 'num_envs', 1)  # Default to 1 if not specified
+        k = getattr(self.cfg.experiment, 'num_envs', 1)
         env_import = self.cfg.experiment.env_import
         
         if render_mode is None:
@@ -256,6 +256,14 @@ class BaseTrainer(ABC):
             render_mode=render_mode if not for_evaluation else None,
             options=options,
         )
+        
+        # Add normalization wrapper
+        if hasattr(self.cfg, 'normalization') and self.cfg.normalization.enabled:
+            env = NormalizationWrapper(
+                env, 
+                norm_obs=getattr(self.cfg.normalization, 'norm_obs', True),
+                norm_reward=getattr(self.cfg.normalization, 'norm_reward', True)
+            )
         
         if for_evaluation:
             env = Monitor(env)
