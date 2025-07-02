@@ -4,7 +4,7 @@ experiment:
     # "CustomMountainCar-v0"
     # "CartPole-v1"
   env_import: "CartPole-v1"
-  name: "norm_4"
+  name: "norm_tb_4"
   description: "PPO Experiment"
   save_path: "./runs"
   num_envs: 4
@@ -12,13 +12,13 @@ experiment:
 environment:
   # init_low: 0.0
   # init_high: 0.0
-  reward_type: "min"  # min / mean / sum
-  termination_type: "first"  # first / half / all
+  reward_type: "sum"  # min / mean / sum
+  termination_type: "half"  # first / half / all
 
 normalization:
   enabled: true
   norm_obs: true
-  norm_reward: true
+  norm_reward: false
 
 algorithm:
   name: "PPO"
@@ -47,10 +47,10 @@ algorithm:
   sde_sample_freq: -1
 
 training:
-  timesteps: 20000   # used for train and resume
+  timesteps: 10000   # used for train and resume
   
   # Evaluation during training
-  eval_freq: 5000
+  eval_freq: 1000
   n_eval_episodes: 5
   eval_deterministic: true
   

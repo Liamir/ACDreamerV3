@@ -16,8 +16,8 @@ import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 import custom_envs
 from custom_envs.action_coupled_wrapper_v3 import ActionCoupledWrapper
-from custom_envs.normalization_wrapper import NormalizationWrapper  # Add this import at top
-
+from custom_envs.normalization_wrapper import NormalizationWrapper
+from ..core.tensorboard_callback import CustomTensorboardCallback
 from ..core.experiment import ExperimentManager, print_env_info
 
 
@@ -312,9 +312,10 @@ class BaseTrainer(ABC):
         
         return episode_rewards, episode_steps
     
-        
     def _create_callbacks(self, experiment_path, eval_env):
-        """Create training callbacks"""
+        """Create training callbacks with enhanced TensorBoard logging"""
+        
+        # Existing callbacks
         checkpoint_callback = CheckpointCallback(
             save_freq=self.cfg.training.save_freq,
             save_path=str(Path(experiment_path) / "models"),
@@ -335,7 +336,23 @@ class BaseTrainer(ABC):
             n_eval_episodes=getattr(self.cfg.training, 'n_eval_episodes', 5),
         )
         
-        return [checkpoint_callback, eval_callback]
+        # New custom TensorBoard callback
+        # Check if logging configuration exists, otherwise use defaults
+        log_frequency = getattr(self.cfg.logging, 'log_frequency', 1000) if hasattr(self.cfg, 'logging') else 1000
+        track_gradients = getattr(self.cfg.logging, 'track_gradients', False) if hasattr(self.cfg, 'logging') else False
+        track_data_stats = getattr(self.cfg.logging, 'track_data_stats', True) if hasattr(self.cfg, 'logging') else True
+        
+        custom_tb_callback = CustomTensorboardCallback(
+            log_frequency=log_frequency,
+            track_gradients=track_gradients,
+            track_data_stats=track_data_stats,
+            verbose=1
+        )
+        
+        # Return all callbacks
+        callbacks = [checkpoint_callback, eval_callback, custom_tb_callback]
+        
+        return callbacks
     
     def _extract_step_count(self, checkpoint_path, model):
         """Extract step count from checkpoint path or model"""
