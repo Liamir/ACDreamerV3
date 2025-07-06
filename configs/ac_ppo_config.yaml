@@ -3,22 +3,23 @@ experiment:
     # "MiniGrid-FourRooms-v0"
     # "CustomMountainCar-v0"
     # "CartPole-v1"
-  env_import: "CartPole-v1"
-  name: "norm_tb_4"
+    # "Pendulum-v1"
+  env_import: "Pendulum-v1"
+  name: "resume_test_2"
   description: "PPO Experiment"
   save_path: "./runs"
-  num_envs: 4
+  num_envs: 1
 
 environment:
   # init_low: 0.0
   # init_high: 0.0
-  reward_type: "sum"  # min / mean / sum
-  termination_type: "half"  # first / half / all
+  reward_type: "min"  # min / mean / sum
+  termination_type: "first"  # first / half / all
 
 normalization:
   enabled: true
   norm_obs: true
-  norm_reward: false
+  norm_reward: true
 
 algorithm:
   name: "PPO"
@@ -37,32 +38,17 @@ algorithm:
     vf_coef: 0.5
     max_grad_norm: 0.5
 
-  # Network architecture
-  policy_kwargs:
-    net_arch: [64, 64]
-    activation_fn: "tanh"
-  
-  # Advanced settings
-  use_sde: false
-  sde_sample_freq: -1
-
 training:
-  timesteps: 10000   # used for train and resume
+  timesteps: 100000   # used for train and resume
   
   # Evaluation during training
-  eval_freq: 1000
+  eval_freq: 2000
   n_eval_episodes: 5
   eval_deterministic: true
   
   # Checkpointing
-  save_freq: 5000
+  save_freq: 50000
   save_best_model: true
-  
-  # Early stopping
-  early_stopping:
-    enabled: true
-    patience: 5
-    min_delta: 10.0
 
 logging:
   # Logging backends

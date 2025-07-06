@@ -13,18 +13,21 @@ class CustomTensorboardCallback(BaseCallback):
                  log_frequency: int = 1000,
                  track_gradients: bool = False,
                  track_data_stats: bool = True,
+                 track_step_rewards: bool = False,  # New parameter
                  verbose: int = 0):
         """
         Args:
             log_frequency: How often to log custom metrics (in steps)
             track_gradients: Whether to track gradient norms (can be expensive)
             track_data_stats: Whether to track observation/reward statistics
+            track_step_rewards: Whether to track step-wise reward stats (disable for constant reward envs)
             verbose: Verbosity level
         """
         super().__init__(verbose)
         self.log_frequency = log_frequency
         self.track_gradients = track_gradients
         self.track_data_stats = track_data_stats
+        self.track_step_rewards = track_step_rewards
         
         # Buffers for tracking statistics
         self.recent_observations = []
@@ -81,6 +84,13 @@ class CustomTensorboardCallback(BaseCallback):
         
         # === Algorithm-Specific Metrics (PPO) ===
         try:
+            # Debug: Check what attributes the model actually has
+            if self.verbose >= 2:
+                print(f"Model type: {type(self.model)}")
+                print(f"Model attributes: {[attr for attr in dir(self.model) if 'buffer' in attr.lower()]}")
+                print(f"Has rollout_buffer: {hasattr(self.model, 'rollout_buffer')}")
+                print(f"Has _last_dones: {hasattr(self.model, '_last_dones')}")
+            
             self._log_ppo_metrics()
         except Exception as e:
             if self.verbose >= 1:
@@ -116,38 +126,94 @@ class CustomTensorboardCallback(BaseCallback):
             if len(obs.shape) == 1:
                 obs = obs.unsqueeze(0)
             
-            # Get policy distribution
+            # Get policy distribution - FIXED VERSION
             with torch.no_grad():
-                features = self.model.policy.extract_features(obs)
-                latent_pi = self.model.policy.mlp_extractor.forward_actor(features)
-                distribution = self.model.policy.action_dist.proba_distribution(
-                    self.model.policy.action_net(latent_pi)
-                )
+                # Use the proper SB3 method that handles distribution creation correctly
+                distribution = self.model.policy.get_distribution(obs)
                 entropy = distribution.entropy().mean().item()
                 self.logger.record('train/policy_entropy', entropy)
                 
+                if self.verbose >= 2:
+                    print(f"Logged policy entropy: {entropy:.4f}")
+                    
         except Exception as e:
             if self.verbose >= 1:
                 print(f"Could not compute policy entropy: {e}")
+            
+            # Fallback method: Try to get entropy from rollout buffer if available
+            try:
+                if hasattr(self.model, 'rollout_buffer') and self.model.rollout_buffer.full:
+                    # This is less accurate but still useful
+                    actions = self.model.rollout_buffer.actions
+                    if actions is not None:
+                        # For continuous actions, estimate entropy from action variance
+                        action_std = torch.std(actions.flatten()).item()
+                        # Rough entropy estimate for Gaussian: 0.5 * log(2 * pi * e * var)
+                        estimated_entropy = 0.5 * np.log(2 * np.pi * np.e * action_std**2)
+                        self.logger.record('train/policy_entropy_estimated', estimated_entropy)
+                        
+                        if self.verbose >= 2:
+                            print(f"Logged estimated entropy: {estimated_entropy:.4f}")
+            except Exception as e2:
+                if self.verbose >= 1:
+                    print(f"Fallback entropy computation also failed: {e2}")
         
         # Access recent training metrics if available
-        if hasattr(self.model, '_last_dones') and hasattr(self.model, 'rollout_buffer'):
-            # Log rollout buffer statistics
-            if self.model.rollout_buffer.full:
-                returns = self.model.rollout_buffer.returns.flatten()
-                values = self.model.rollout_buffer.values.flatten()
+        # Try different ways to access the rollout buffer
+        rollout_buffer = None
+        
+        # Method 1: Direct access
+        if hasattr(self.model, 'rollout_buffer'):
+            rollout_buffer = self.model.rollout_buffer
+            if self.verbose >= 2:
+                print("Found rollout_buffer via direct access")
+        
+        # Method 2: Check if it's in the policy
+        elif hasattr(self.model, 'policy') and hasattr(self.model.policy, 'rollout_buffer'):
+            rollout_buffer = self.model.policy.rollout_buffer
+            if self.verbose >= 2:
+                print("Found rollout_buffer via policy")
+        
+        # Method 3: Check common SB3 locations
+        elif hasattr(self.model, '_last_obs') and hasattr(self.model, 'num_timesteps'):
+            # Model exists but no rollout_buffer - might be timing issue
+            if self.verbose >= 2:
+                print("Model exists but no rollout_buffer found")
+        
+        if rollout_buffer is not None:
+            if self.verbose >= 2:
+                print(f"Rollout buffer full: {rollout_buffer.full}")
+                print(f"Buffer size: {rollout_buffer.buffer_size}")
+                print(f"Buffer pos: {rollout_buffer.pos}")
                 
-                # Explained variance - key diagnostic for value function quality
-                var_y = np.var(returns)
-                explained_var = 1 - np.var(returns - values) / (var_y + 1e-8)
-                self.logger.record('train/explained_variance', explained_var)
-                
-                # Value function statistics
-                self.logger.record('train/value_mean', np.mean(values))
-                self.logger.record('train/value_std', np.std(values))
-                self.logger.record('train/return_mean', np.mean(returns))
-                self.logger.record('train/return_std', np.std(returns))
-    
+            if rollout_buffer.full:
+                try:
+                    returns = rollout_buffer.returns.flatten()
+                    values = rollout_buffer.values.flatten()
+                    
+                    if self.verbose >= 2:
+                        print(f"Returns shape: {returns.shape}, Values shape: {values.shape}")
+                    
+                    # Value function statistics
+                    self.logger.record('custom/value_mean', np.mean(values))
+                    self.logger.record('custom/value_std', np.std(values))
+                    self.logger.record('custom/return_mean', np.mean(returns))
+                    self.logger.record('custom/return_std', np.std(returns))
+                    
+                    if self.verbose >= 1:
+                        print(f"Logged value metrics")
+                        
+                except Exception as e:
+                    if self.verbose >= 1:
+                        print(f"Error accessing rollout buffer data: {e}")
+            else:
+                if self.verbose >= 2:
+                    print("Rollout buffer not full yet")
+        else:
+            if self.verbose >= 1:
+                print("No rollout buffer found - value metrics not available")
+
+
     def _log_data_statistics(self):
         """Log observation and reward statistics"""
         try:
@@ -162,14 +228,17 @@ class CustomTensorboardCallback(BaseCallback):
                     self.logger.record('data/obs_min', np.min(obs_flat))
                     self.logger.record('data/obs_max', np.max(obs_flat))
                 
-                # Reward statistics
-                rewards = self.model.rollout_buffer.rewards
-                if rewards is not None:
-                    rewards_flat = rewards.flatten()
-                    self.logger.record('data/reward_mean', np.mean(rewards_flat))
-                    self.logger.record('data/reward_std', np.std(rewards_flat))
-                    self.logger.record('data/reward_min', np.min(rewards_flat))
-                    self.logger.record('data/reward_max', np.max(rewards_flat))
+                # Reward statistics (only if enabled and rewards vary)
+                if self.track_step_rewards:
+                    rewards = self.model.rollout_buffer.rewards
+                    if rewards is not None:
+                        rewards_flat = rewards.flatten()
+                        # Only log if rewards have meaningful variation
+                        if np.std(rewards_flat) > 1e-6:
+                            self.logger.record('data/reward_mean', np.mean(rewards_flat))
+                            self.logger.record('data/reward_std', np.std(rewards_flat))
+                            self.logger.record('data/reward_min', np.min(rewards_flat))
+                            self.logger.record('data/reward_max', np.max(rewards_flat))
                     
         except Exception as e:
             if self.verbose >= 1:

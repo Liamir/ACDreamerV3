@@ -27,7 +27,12 @@ class PPOTrainer(BaseTrainer):
             gamma=self.cfg.algorithm.hyperparameters.gamma,
             gae_lambda=self.cfg.algorithm.hyperparameters.gae_lambda,
             clip_range=self.cfg.algorithm.hyperparameters.clip_range,
-            tensorboard_log=str(tensorboard_path)
+            clip_range_vf=self.cfg.algorithm.hyperparameters.clip_range_vf,
+            ent_coef=self.cfg.algorithm.hyperparameters.ent_coef,
+            vf_coef=self.cfg.algorithm.hyperparameters.vf_coef,
+            max_grad_norm=self.cfg.algorithm.hyperparameters.max_grad_norm,
+            tensorboard_log=str(tensorboard_path),
+            device='cpu',
         )
         
         return model

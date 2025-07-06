@@ -71,10 +71,15 @@ def handle_train_command(cfg, args):
     """Handle train command"""
     print(f"\n🚀 Starting {cfg.algorithm.name} Training...")
     
+    import time
+    start_time = time.time()
     trainer = create_trainer(cfg)
     trainer.train()
+    training_time = time.time() - start_time
     
     print("✅ Training completed successfully!")
+    print(f"Training time: {training_time:.1f}s")
+
 
 
 def handle_test_command(cfg, args):

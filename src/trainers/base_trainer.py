@@ -322,7 +322,7 @@ class BaseTrainer(ABC):
             name_prefix="checkpoint",
             save_replay_buffer=False,
             save_vecnormalize=True,
-            verbose=2
+            verbose=1
         )
         
         eval_callback = EvalCallback(
@@ -421,7 +421,7 @@ class BaseTrainer(ABC):
             save_path=str(Path(experiment_path) / "models"),
             name_prefix="checkpoint",
             starting_steps=starting_steps,
-            verbose=2
+            verbose=1
         )
         
         eval_callback = EvalCallback(
