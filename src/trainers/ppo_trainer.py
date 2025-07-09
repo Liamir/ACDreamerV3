@@ -31,6 +31,9 @@ class PPOTrainer(BaseTrainer):
             ent_coef=self.cfg.algorithm.hyperparameters.ent_coef,
             vf_coef=self.cfg.algorithm.hyperparameters.vf_coef,
             max_grad_norm=self.cfg.algorithm.hyperparameters.max_grad_norm,
+            use_sde=self.cfg.algorithm.hyperparameters.use_sde,
+            sde_sample_freq=self.cfg.algorithm.hyperparameters.sde_sample_freq,
+            target_kl=self.cfg.algorithm.hyperparameters.target_kl,
             tensorboard_log=str(tensorboard_path),
             device='cpu',
         )

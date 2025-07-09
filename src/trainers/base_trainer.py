@@ -4,6 +4,8 @@ Base Trainer Module - Updated with config-based initialization
 
 import os
 import re
+import random
+import copy
 import gymnasium as gym
 from stable_baselines3.common.callbacks import CheckpointCallback, EvalCallback
 from stable_baselines3.common.monitor import Monitor
@@ -113,6 +115,7 @@ class BaseTrainer(ABC):
             raise
         
         return model
+
     
     def test(self, model_path=None):
         """Test a trained model"""

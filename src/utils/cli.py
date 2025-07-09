@@ -13,7 +13,7 @@ def create_argument_parser():
     parser = argparse.ArgumentParser(description="RL Training Pipeline")
     
     # Main command
-    parser.add_argument("command", choices=["train", "test", "resume", "list"], 
+    parser.add_argument("command", choices=["train", "test", "resume", "tune", "list"], 
                        help="Action to perform")
     
     # Config file

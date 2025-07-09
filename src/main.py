@@ -4,6 +4,13 @@ Simple orchestrator that coordinates all components
 """
 
 import sys
+import copy
+import random
+import json
+import csv
+from pathlib import Path
+from datetime import datetime
+
 from .utils.cli import create_argument_parser, load_config_with_cli_overrides, print_configuration_summary
 from .trainers.ppo_trainer import PPOTrainer
 from .trainers.dqn_trainer import DQNTrainer
@@ -53,6 +60,8 @@ def main():
             handle_test_command(cfg, args)
         elif args.command == "resume":
             handle_resume_command(cfg, args)
+        elif args.command == "tune":
+            handle_tune_command(cfg, args)
         elif args.command == "list":
             handle_list_command(cfg, args)
         else:
@@ -80,6 +89,73 @@ def handle_train_command(cfg, args):
     print("✅ Training completed successfully!")
     print(f"Training time: {training_time:.1f}s")
 
+
+def handle_tune_command(cfg, args):
+    """Handle tune command"""
+    if not cfg.algorithm.tuning.enabled:
+        print("Tuning is disabled in config.")
+        return
+
+    num_trials = cfg.algorithm.tuning.num_trials
+    search_space = cfg.algorithm.tuning.search_space
+
+    # Create a unique folder for this tuning run    
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    k = cfg.experiment.num_envs
+    ac_str = f'{k}ac_' if k > 1 else ''
+    run_name = cfg.experiment.name
+    env_name = cfg.experiment.env_import.split('-')[0].lower()
+    tuning_folder = Path(f"{cfg.algorithm.name.lower()}_{ac_str}{env_name}_{run_name}_{timestamp}")
+    
+    base_path = cfg.experiment.save_path
+    tuning_path = base_path / tuning_folder
+    tuning_path.mkdir(parents=True, exist_ok=True)
+    csv_file = tuning_path / "tuning_log.csv"
+    fieldnames = ['trial', 'experiment_name', 'timestamp'] + list(search_space.keys())
+
+    with open(csv_file, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+
+        for i in range(num_trials):
+            print("=" * 60)
+            print(f"Trial {i + 1}/{num_trials}")
+            print("=" * 60)
+
+            # Deep copy base config
+            trial_cfg = copy.deepcopy(cfg)
+
+            # Sample hyperparameters
+            sampled_params = {}
+            for param, (low, high) in search_space.items():
+                if isinstance(low, int) and isinstance(high, int):
+                    value = random.randint(low, high)
+                else:
+                    value = random.uniform(float(low), float(high))
+                trial_cfg.algorithm.hyperparameters[param] = value
+                sampled_params[param] = value
+
+            # Unique experiment name and path for the trial
+            trial_name = f"trial_{i + 1}"
+            trial_cfg.experiment.name = trial_name
+            trial_cfg.experiment.save_path = str(tuning_path / trial_name)
+
+            # Create and train
+            trainer = create_trainer(trial_cfg)
+            trainer.train()
+
+            # Write log row
+            log_entry = {
+                "trial": i + 1,
+                "experiment_name": trial_name,
+                "timestamp": datetime.now().isoformat(),
+                **sampled_params,
+            }
+            writer.writerow(log_entry)
+
+    print("✅ Tuning completed successfully!")
+    print(f"📁 All trials saved under: {tuning_path}")
+    print(f"📄 Tuning log saved to: {csv_file}")
 
 
 def handle_test_command(cfg, args):

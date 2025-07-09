@@ -5,7 +5,7 @@ experiment:
     # "CartPole-v1"
     # "Pendulum-v1"
   env_import: "Pendulum-v1"
-  name: "resume_test_2"
+  name: "tuning_300k_1"
   description: "PPO Experiment"
   save_path: "./runs"
   num_envs: 1
@@ -27,44 +27,41 @@ algorithm:
   # Core hyperparameters
   hyperparameters:
     learning_rate: 3.0e-4
-    batch_size: 256
-    n_epochs: 10
-    n_steps: 2048
-    gamma: 0.99
+    batch_size: 64
+    n_epochs: 5
+    n_steps: 1024
+    gamma: 0.9
     gae_lambda: 0.95
     clip_range: 0.2
     clip_range_vf: null
-    ent_coef: 0.0
+    ent_coef: 0.01
     vf_coef: 0.5
-    max_grad_norm: 0.5
+    max_grad_norm: 0.3
+    use_sde: true
+    sde_sample_freq: 4
+    target_kl: null
+
+  tuning:
+    enabled: true
+    num_trials: 10
+    search_space:
+      learning_rate: [1e-5, 3e-3]
+      gamma: [0.9, 0.999]
+      gae_lambda: [0.8, 0.98]
+      clip_range: [0.1, 0.3]
+      ent_coef: [0.0, 0.1]
 
 training:
-  timesteps: 100000   # used for train and resume
+  timesteps: 300000   # used for train and resume
   
   # Evaluation during training
-  eval_freq: 2000
+  eval_freq: 10000
   n_eval_episodes: 5
   eval_deterministic: true
   
   # Checkpointing
   save_freq: 50000
   save_best_model: true
-
-logging:
-  # Logging backends
-  tensorboard: true
-  wandb: false
-  console_log_level: "INFO"
-  
-  # Video recording
-  record_video: true
-  video_freq: 50000
-  video_length: 500
-  
-  # Custom metrics
-  custom_metrics:
-    - "episode_height"
-    - "exploration_bonus"
 
 # Testing/evaluation settings
 evaluation:
@@ -73,7 +70,6 @@ evaluation:
   deterministic: true
   render_mode: "rgb_array"
   save_trajectories: false
-
 
 # Reproducibility
 seed: 42
