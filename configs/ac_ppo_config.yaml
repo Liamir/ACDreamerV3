@@ -4,8 +4,8 @@ experiment:
     # "CustomMountainCar-v0"
     # "CartPole-v1"
     # "Pendulum-v1"
-  env_import: "Pendulum-v1"
-  name: "tuning_300k_1"
+  env_import: "CellGroup-v0"
+  name: "first_cell"
   description: "PPO Experiment"
   save_path: "./runs"
   num_envs: 1
@@ -16,10 +16,10 @@ environment:
   reward_type: "min"  # min / mean / sum
   termination_type: "first"  # first / half / all
 
-normalization:
-  enabled: true
-  norm_obs: true
-  norm_reward: true
+# normalization:
+#   enabled: true
+#   norm_obs: true
+#   norm_reward: true
 
 algorithm:
   name: "PPO"
@@ -37,7 +37,7 @@ algorithm:
     ent_coef: 0.01
     vf_coef: 0.5
     max_grad_norm: 0.3
-    use_sde: true
+    use_sde: false
     sde_sample_freq: 4
     target_kl: null
 
@@ -52,15 +52,15 @@ algorithm:
       ent_coef: [0.0, 0.1]
 
 training:
-  timesteps: 300000   # used for train and resume
+  timesteps: 50000   # used for train and resume
   
   # Evaluation during training
-  eval_freq: 10000
+  eval_freq: 1000
   n_eval_episodes: 5
   eval_deterministic: true
   
   # Checkpointing
-  save_freq: 50000
+  save_freq: 5000
   save_best_model: true
 
 # Testing/evaluation settings

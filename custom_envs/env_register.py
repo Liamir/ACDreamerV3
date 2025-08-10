@@ -11,3 +11,9 @@ register(
     entry_point="custom_envs.mountain_car_v1:MountainCarEnv",
     max_episode_steps=200,
 )
+
+register(
+    id="CellGroup-v0",
+    entry_point="custom_envs.cell_group:ProstateCancerTherapyEnv",
+    max_episode_steps=15000,  # TODO change
+)

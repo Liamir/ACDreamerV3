@@ -5,6 +5,7 @@ Base Trainer Module - Updated with config-based initialization
 import os
 import re
 import random
+import numpy as np
 import copy
 import gymnasium as gym
 from stable_baselines3.common.callbacks import CheckpointCallback, EvalCallback
@@ -253,8 +254,24 @@ class BaseTrainer(ABC):
         if render_mode is None:
             render_mode = "rgb_array"
         
+        LV_params = {  # patient #1 ESS params (index 7): 6060.60606060606,7575.75757575758,1.e-09,27272.7272727273
+            'ess_counts': np.array([6060.60606060606, 7575.75757575758, 1.e-09], dtype=np.float64),  # T+, TP, T- (scaled to 10% as in paper)
+            'growth_rates': np.array([0.27726, 0.34657, 0.66542], dtype=np.float64),
+            'carrying_capacities': np.array([-1, 10000, 10000], dtype=np.float64),  # T+ depends on TP (1.5*TP; set in reset), TP (determines capacity of no-treatment), T-
+            'tp_cap_on_treatment': np.array([100], dtype=np.float64),
+            'competition_matrix': np.array([
+                [1.0, 0.7, 0.8],  # T+ vs T+, TP, T-
+                [0.4, 1.0, 0.5],  # TP vs T+, TP, T-
+                [0.6, 0.9, 1.0]   # T- vs T+, TP, T-
+            ], dtype=np.float64),
+            'ess_psa': np.array([27272.7272727273], dtype=np.float64),
+        }  # patient #1 alpha params (index 7): 0.7,0.8,0.4,0.5,0.6,0.9
+
         env = ActionCoupledWrapper(
-            env_fn=lambda render_mode=render_mode: gym.make(env_import, render_mode=render_mode),
+            env_fn=lambda render_mode=render_mode: gym.make(
+                env_import,
+                LV_params=LV_params,
+                render_mode=render_mode),
             k=k,
             render_mode=render_mode if not for_evaluation else None,
             options=options,
@@ -300,7 +317,6 @@ class BaseTrainer(ABC):
             while True:
                 action, _states = model.predict(obs, deterministic=True)
                 obs, reward, done, truncated, info = env.step(action)
-                
                 env.render()
                 
                 done = done or truncated
