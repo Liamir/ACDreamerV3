@@ -19,7 +19,7 @@ class PPOTrainer(BaseTrainer):
         model = PPO(
             "MlpPolicy",
             env,
-            verbose=1,
+            verbose=0,
             learning_rate=self.cfg.algorithm.hyperparameters.learning_rate,
             n_steps=self.cfg.algorithm.hyperparameters.n_steps,
             batch_size=self.cfg.algorithm.hyperparameters.batch_size,

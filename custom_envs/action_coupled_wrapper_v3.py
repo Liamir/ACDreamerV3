@@ -57,6 +57,8 @@ class ActionCoupledWrapper(Wrapper):
         else:
             self.seeds = None
 
+        self.init_options = options or {}
+
         self.reward_type = options.get('reward_type', 'min')
         self.termination_type = options.get('termination_type', 'first')
 
@@ -95,9 +97,6 @@ class ActionCoupledWrapper(Wrapper):
         # For logging purposes
         if self.seeds:
             logging.info(f"Initialized environments with seeds: {self.seeds}")
-            
-        # Reset immediately to apply seeds
-        self.reset(seed=seed)
     
 
     def _create_stacked_observation_space(self, single_obs_space, k):
@@ -387,6 +386,8 @@ class ActionCoupledWrapper(Wrapper):
             #     # For environments like MountainCar that use low/high directly
             #     pass  # Keep the original options
         
+        reset_options = options or self.init_options
+        
         # Reset environments
         observations = []
         for i, env in enumerate(self.envs):
@@ -398,15 +399,15 @@ class ActionCoupledWrapper(Wrapper):
             
             # Reset and get observation
             try:
-                result = env.reset(seed=reset_seed, options=options)
+                result = env.reset(seed=reset_seed, options=reset_options)
             except TypeError:
                 # Fallback for environments that don't support options
                 print(f'Failed to automatically set the initial state ranges. Trying to set them manually.')
                 result = env.reset(seed=reset_seed)
                 
                 # Apply manual initialization if ranges provided
-                if options is not None:
-                    self._apply_manual_initialization(env, options)
+                if reset_options is not None:
+                    self._apply_manual_initialization(env, reset_options)
                     result = self._get_observation_after_state_change(env)
             
             # Handle different return formats
@@ -539,7 +540,7 @@ class ActionCoupledWrapper(Wrapper):
 
         if self.reward_type == 'min':
             reward = np.min(rewards)
-        elif self.reward_type == 'mean':
+        elif self.reward_type == 'avg':
             reward = np.mean(rewards)
         elif self.reward_type == 'sum':
             reward = np.sum(rewards)

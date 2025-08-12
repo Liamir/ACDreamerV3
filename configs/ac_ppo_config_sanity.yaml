@@ -1,0 +1,74 @@
+experiment:
+  # env examples:
+    # "MiniGrid-FourRooms-v0"
+    # "CustomMountainCar-v0"
+    # "CartPole-v1"
+    # "Pendulum-v1"
+  env_import: "CartPole-v1"
+  name: "sanity"
+  description: "PPO Experiment"
+  save_path: "./runs"
+  num_envs: 1
+
+environment:
+  reward_type: "min"  # min / avg / sum
+  termination_type: "first"  # first / half / all
+
+normalization:
+  enabled: false
+  norm_obs: false
+  norm_reward: false
+
+algorithm:
+  name: "PPO"
+  
+  # Core hyperparameters
+  hyperparameters:
+    learning_rate: 0.00025        # lin_0.001 in zoo (linear schedule)
+    n_steps: 128                 # Very small rollout for CartPole
+    batch_size: 512             # Large batch size
+    n_epochs: 4                # Many epochs per update
+    gamma: 0.99                 # High discount factor
+    gae_lambda: 0.95             # GAE parameter
+    clip_range: 0.2             # lin_0.2 in zoo (linear schedule) 
+    clip_range_vf: null         # No value function clipping
+    ent_coef: 0.01               # No entropy bonus needed
+    vf_coef: 0.5                # Standard value function coefficient
+    max_grad_norm: 0.5          # Gradient clipping
+    use_sde: false              # No state-dependent exploration
+    sde_sample_freq: -1
+    target_kl: null
+
+  tuning:
+    enabled: true
+    num_trials: 10
+    search_space:
+      learning_rate: [1e-5, 3e-3]
+      gamma: [0.9, 0.999]
+      gae_lambda: [0.8, 0.98]
+      clip_range: [0.1, 0.3]
+      ent_coef: [0.0, 0.1]
+
+training:
+  timesteps: 100000   # used for train and resume
+  
+  # Evaluation during training
+  eval_freq: 10000
+  n_eval_episodes: 5
+  eval_deterministic: true
+  
+  # Checkpointing
+  save_freq: 20000
+  save_best_model: true
+
+# Testing/evaluation settings
+evaluation:
+  episodes: 3
+  model_type: "final"
+  deterministic: true
+  render_mode: "rgb_array"
+  save_trajectories: false
+
+# Reproducibility
+seed: 42
+deterministic_pytorch: true

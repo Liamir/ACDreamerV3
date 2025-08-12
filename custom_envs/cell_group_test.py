@@ -4,8 +4,8 @@ from cell_group import ProstateCancerTherapyEnv
 
 def main():
     # Define Lotka-Volterra parameters based on the paper
-    LV_params = {  # patient #1 ESS params (index 7): 6060.60606060606,7575.75757575758,1.e-09,27272.7272727273
-        'ess_counts': np.array([6060.60606060606, 7575.75757575758, 1.e-09], dtype=np.float64),  # T+, TP, T- (scaled to 10% as in paper)
+    LV_params_patient_1 = {  # patient #1 ESS params (index 7): 6060.60606060606,7575.75757575758,1.e-09,27272.7272727273
+        'init_counts': np.array([6060.60606060606, 7575.75757575758, 1.e-09], dtype=np.float64),  # T+, TP, T- (scaled to 10% as in paper)
         'growth_rates': np.array([0.27726, 0.34657, 0.66542], dtype=np.float64),
         'carrying_capacities': np.array([-1, 10000, 10000], dtype=np.float64),  # T+ depends on TP (1.5*TP; set in reset), TP (determines capacity of no-treatment), T-
         'tp_cap_on_treatment': np.array([100], dtype=np.float64),
@@ -14,7 +14,20 @@ def main():
             [0.4, 1.0, 0.5],  # TP vs T+, TP, T-
             [0.6, 0.9, 1.0]   # T- vs T+, TP, T-
         ], dtype=np.float64),
-        'ess_psa': np.array([27272.7272727273], dtype=np.float64),
+        'init_psa': np.array([27272.7272727273], dtype=np.float64),
+    }  # patient #1 alpha params (index 7): 0.7,0.8,0.4,0.5,0.6,0.9
+
+    LV_params = {  # patient #1 ESS params (index 7): 6060.60606060606,7575.75757575758,1.e-09,27272.7272727273
+        'init_counts': 0.4 * np.array([6060.60606060606, 7575.75757575758, 1.e-09], dtype=np.float64),  # T+, TP, T- (scaled to 10% as in paper)
+        'growth_rates': np.array([0.27726, 0.34657, 0.66542], dtype=np.float64),
+        'carrying_capacities': np.array([-1, 10000, 10000], dtype=np.float64),  # T+ depends on TP (1.5*TP; set in reset), TP (determines capacity of no-treatment), T-
+        'tp_cap_on_treatment': np.array([100], dtype=np.float64),
+        'competition_matrix': np.array([
+            [1.0, 0.7, 0.8],  # T+ vs T+, TP, T-
+            [0.4, 1.0, 0.5],  # TP vs T+, TP, T-
+            [0.6, 0.9, 1.0]   # T- vs T+, TP, T-
+        ], dtype=np.float64),
+        'init_psa': 0.4 * np.array([27272.7272727273], dtype=np.float64),
     }  # patient #1 alpha params (index 7): 0.7,0.8,0.4,0.5,0.6,0.9
     
     # Initialize environment

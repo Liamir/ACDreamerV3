@@ -15,22 +15,19 @@ class ProstateCancerTherapyEnv(gym.Env):
         'render_fps': 30,
     }
 
-    def __init__(self, LV_params, dt=0.01, init_pop_ratio=0.4, render_mode='rgb_array'):
+    def __init__(self, LV_params, dt=0.01, render_mode='rgb_array'):
         self.render_mode = render_mode
         self.dt = dt
-        self.init_pop_ratio = init_pop_ratio
         self.params = copy.deepcopy(LV_params)
         self.tp_cap_on_treatment = self.params['tp_cap_on_treatment']
         self.growth_rates = self.params['growth_rates']
         self.competition_matrix = self.params['competition_matrix']
-        self.ess_psa = self.params['ess_psa']
 
-        # initialized in reset:
-        # self.carrying_capacities = [-1, -1, -1]
-        # self.counts = None
-        # self.population_size = -1
-        # self.psa_norm = -1
-        # self.psa = -1
+        # self.default_init_ranges = {
+        #     'tplus_counts': (10, 5000),    # T+ cells ratio range
+        #     'tprod_counts': (10, 5000),   # TP cells ratio range
+        #     'tneg_counts': (1.0e-9, 1),    # T- cells ratio range
+        # }
         
         # the observation should be the counts of all cell types.
         # these can be either direct count data, or ratio with another total population entry.
@@ -56,7 +53,7 @@ class ProstateCancerTherapyEnv(gym.Env):
     def _get_obs(self):
         return {
             "ratios": self.counts / self.population_size,
-            "population": np.array([self.population_size]),
+            "population": np.array([self.population_size]) / self.original_population,
             "psa": np.array([self.psa_norm]),
         }
 
@@ -81,16 +78,65 @@ class ProstateCancerTherapyEnv(gym.Env):
         """
         super().reset(seed=seed)
 
-        self.population_size = np.sum(self.init_pop_ratio * self.params['ess_counts'])
-        self.counts = self.init_pop_ratio * self.params['ess_counts']
+        self.init_options = options or {}
 
-        self.psa = self.init_pop_ratio * float(self.ess_psa)
+        # Merge passed options with stored init_options
+        # print('INIT OPTIONS:', self.init_options)
+        
+        # Check if we should randomize initialization
+        should_randomize = (
+            'low' in self.init_options and 'high' in self.init_options and
+            any(key in self.init_options['low'] for key in ['tplus_counts', 'tprod_counts', 'tneg_counts'])
+        )
+        
+        if should_randomize:
+            low_ranges = self.init_options.get('low', {})
+            high_ranges = self.init_options.get('high', {})
+            
+            tplus_min = low_ranges['tplus_counts']
+            tplus_max = high_ranges['tplus_counts']
+            tplus_count = self.np_random.uniform(tplus_min, tplus_max)
+            
+            tprod_min = low_ranges['tprod_counts']
+            tprod_max = high_ranges['tprod_counts']
+            tprod_count = self.np_random.uniform(tprod_min, tprod_max)
+            
+            tneg_min = low_ranges['tneg_counts']
+            tneg_max = high_ranges['tneg_counts']
+            tneg_count = self.np_random.uniform(tneg_min, tneg_max)
+            
+            # Set the randomized counts
+            self.counts = np.array([tplus_count, tprod_count, tneg_count])
+            self.population_size = np.sum(self.counts)
+            self.psa = self.population_size * 2.0
+            
+            # print(f"Randomized initialization:")
+            # print(f"  T+ cells: {tplus_count:.1f}")
+            # print(f"  TP cells: {tprod_count:.1f}")
+            # print(f"  T- cells: {tneg_count:.1f}")
+            # print(f"  Total population: {self.population_size:.1f}")
+            
+        else:
+            # Use default initialization
+            self.population_size = np.sum(self.params['init_counts'])
+            self.counts = self.params['init_counts']
+            self.psa = float(self.params['init_psa'])
+            
+            # print(f"Default initialization:")
+            # print(f"  T+ cells: {self.counts[0]:.1f}")
+            # print(f"  TP cells: {self.counts[1]:.1f}")
+            # print(f"  T- cells: {self.counts[2]:.1f}")
+            # print(f"  Total population: {self.population_size:.1f}")
+
+        self.original_population = self.population_size
         self.original_psa = self.psa
         self.psa_norm = np.float64(1.0)
 
         self.carrying_capacities = self.params['carrying_capacities']
         self.carrying_capacities[0] = 1.5 * self.counts[1]
         self.tp_capacity_off_treatment = self.carrying_capacities[1]
+
+        self.high_psa_streak = 0
 
         observation = self._get_obs()
         info = self._get_info()
@@ -126,13 +172,33 @@ class ProstateCancerTherapyEnv(gym.Env):
         self.psa += self.dt * (np.sum(prev_counts) - 0.5 * self.psa)
         self.psa_norm = self.psa / self.original_psa
 
+        if self.psa_norm >= 1.2:
+            self.high_psa_streak += 1
+        else:
+            self.high_psa_streak = 0
+
         terminated = False
         truncated = False
+
+        if self.high_psa_streak >= 100:
+            terminated = True
 
         # a constant size tumor gets 0 reward,
         # shrinked tumor gets a positive reward, and an increase in tumor size gets negative reward
         # calculating reward based on the new state (new PSA)
-        reward = (1 - self.psa_norm)  # multiply by some factor?
+        # reward = (1.0 - self.psa_norm)
+        # if self.psa_norm >= 1.2:
+        #     reward -= 3000.0
+
+        reward = 0.1
+        if action == 1:
+            reward -= 0.01
+            
+        # if action == 0:
+        #     reward += 0.05
+        # if self.psa_norm >= 1.2:
+        #     reward -= -0.1
+        
 
         observation = self._get_obs()
         info = self._get_info()
