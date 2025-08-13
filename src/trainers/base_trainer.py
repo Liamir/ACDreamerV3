@@ -118,13 +118,13 @@ class BaseTrainer(ABC):
         return model
 
     
-    def test(self, model_path=None):
+    def test(self):
         """Test a trained model"""
         num_episodes = self.cfg.evaluation.episodes
 
         # Determine model path
-        if model_path:
-            checkpoint_path = model_path
+        if self.cfg.evaluation.model_path:
+            checkpoint_path = self.cfg.evaluation.model_path
             print(f"Using provided model path: {checkpoint_path}")
         else:
             checkpoint_path = self.experiment_manager.find_model_from_config(self.cfg)
@@ -135,6 +135,7 @@ class BaseTrainer(ABC):
         # Load model
         model = self._load_model(checkpoint_path)
         if model is None:
+            print("Could not load model.")
             return
         
         # Get initialization options from config
@@ -157,14 +158,14 @@ class BaseTrainer(ABC):
         env.close()
         return episode_rewards, episode_steps
     
-    def resume(self, model_path=None):
+    def resume(self):
         """Resume training from a checkpoint"""
         additional_steps = self.cfg.training.timesteps
         
         # Find the model to resume from
-        if model_path:
-            checkpoint_path = model_path
-            experiment_path = self._extract_experiment_path_from_model(model_path)
+        if self.cfg.evaluation.model_path:
+            checkpoint_path = self.cfg.evaluation.model_path
+            experiment_path = self._extract_experiment_path_from_model(self.cfg.evaluation.model_path)
         else:
             checkpoint_path = self.experiment_manager.find_model_from_config(self.cfg)
             if not checkpoint_path:

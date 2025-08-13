@@ -15,5 +15,5 @@ register(
 register(
     id="CellGroup-v0",
     entry_point="custom_envs.cell_group:ProstateCancerTherapyEnv",
-    max_episode_steps=10000,  # TODO change
+    max_episode_steps=8000,  # TODO change
 )

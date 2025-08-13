@@ -22,12 +22,6 @@ class ProstateCancerTherapyEnv(gym.Env):
         self.tp_cap_on_treatment = self.params['tp_cap_on_treatment']
         self.growth_rates = self.params['growth_rates']
         self.competition_matrix = self.params['competition_matrix']
-
-        # self.default_init_ranges = {
-        #     'tplus_counts': (10, 5000),    # T+ cells ratio range
-        #     'tprod_counts': (10, 5000),   # TP cells ratio range
-        #     'tneg_counts': (1.0e-9, 1),    # T- cells ratio range
-        # }
         
         # the observation should be the counts of all cell types.
         # these can be either direct count data, or ratio with another total population entry.
@@ -90,8 +84,8 @@ class ProstateCancerTherapyEnv(gym.Env):
         )
         
         if should_randomize:
-            low_ranges = self.init_options.get('low', {})
-            high_ranges = self.init_options.get('high', {})
+            low_ranges = self.init_options['low']
+            high_ranges = self.init_options['high']
             
             tplus_min = low_ranges['tplus_counts']
             tplus_max = high_ranges['tplus_counts']
@@ -144,7 +138,8 @@ class ProstateCancerTherapyEnv(gym.Env):
         return observation, info
     
     def step(self, action):
-        """Execute one timestep within the environment
+        """
+        Execute one timestep within the environment
         """
 
         self.last_action = action
@@ -183,22 +178,18 @@ class ProstateCancerTherapyEnv(gym.Env):
         if self.high_psa_streak >= 100:
             terminated = True
 
-        # a constant size tumor gets 0 reward,
-        # shrinked tumor gets a positive reward, and an increase in tumor size gets negative reward
-        # calculating reward based on the new state (new PSA)
         # reward = (1.0 - self.psa_norm)
         # if self.psa_norm >= 1.2:
         #     reward -= 3000.0
+        reward = 0.0
 
-        reward = 0.1
+        reward += 0.1
+        
         if action == 1:
             reward -= 0.01
-            
-        # if action == 0:
-        #     reward += 0.05
-        # if self.psa_norm >= 1.2:
-        #     reward -= -0.1
-        
+
+        if self.psa_norm >= 1.2:
+            reward -= -0.1     
 
         observation = self._get_obs()
         info = self._get_info()

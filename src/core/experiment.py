@@ -174,19 +174,19 @@ class ExperimentManager:
             return 0
         
         return -1  # Unknown pattern
-    
+
     def find_model_from_config(self, cfg):
-        """Find model path based on config information"""
+        """Find model path based on config information, including support for tuning trials"""
         # Reconstruct experiment folder pattern
         k = cfg.experiment.num_envs
         ac_str = f'{k}ac_' if k > 1 else ''
         run_name = cfg.experiment.name
         env_name = cfg.experiment.env_import.split('-')[0].lower()
         model_type = cfg.evaluation.model_type
+        trial_to_eval = cfg.evaluation.trial_to_eval
         
         # Pattern to match experiment folders
         folder_pattern = f"{cfg.algorithm.name.lower()}_{ac_str}{env_name}_{run_name}_*"
-        search_pattern = self.base_path / folder_pattern
         
         # Find matching experiment folders
         matching_folders = list(self.base_path.glob(folder_pattern))
@@ -201,9 +201,49 @@ class ExperimentManager:
         
         print(f"Found experiment folder: {latest_experiment.name}")
         
-        # Determine model file based on type
-        models_dir = latest_experiment / "models"
+        # Check if this is a tuning experiment by looking for trial folders
+        trial_folders = [f for f in latest_experiment.iterdir() 
+                        if f.is_dir() and f.name.startswith('trial_')]
         
+        is_tuning_experiment = len(trial_folders) > 0
+        
+        # Handle tuning trials vs regular experiments
+        if is_tuning_experiment:
+            # This is a tuning experiment - look for trial subfolder
+            trial_folder_name = f"trial_{trial_to_eval}"
+            trial_folder_path = latest_experiment / trial_folder_name
+            
+            if not trial_folder_path.exists():
+                print(f"Trial folder not found: {trial_folder_path}")
+                self._show_available_trials(latest_experiment)
+                return None
+            
+            print(f"Found trial folder: {trial_folder_name}")
+            
+            # Look for the experiment subfolder within the trial folder
+            # It should contain the trial name in its folder name
+            trial_subfolders = [f for f in trial_folder_path.iterdir() 
+                            if f.is_dir() and trial_folder_name in f.name]
+            
+            if not trial_subfolders:
+                print(f"No experiment subfolder found in trial folder {trial_folder_path}")
+                print("Available subfolders:")
+                for subfolder in trial_folder_path.iterdir():
+                    if subfolder.is_dir():
+                        print(f"  - {subfolder.name}")
+                return None
+            
+            # Use the first matching subfolder (there should only be one)
+            experiment_subfolder = trial_subfolders[0]
+            models_dir = experiment_subfolder / "models"
+            
+            print(f"Using trial experiment subfolder: {experiment_subfolder.name}")
+            
+        else:
+            # Regular experiment (not tuning)
+            models_dir = latest_experiment / "models"
+        
+        # Determine model file based on type
         if model_type == "best":
             model_path = models_dir / "best_model.zip"
         elif model_type == "final":
@@ -214,24 +254,19 @@ class ExperimentManager:
                 return str(model_path)
         elif model_type.startswith("checkpoint_"):
             model_path = models_dir / f"{model_type}.zip"
-            if model_path.exists():
-                print(f"Found model: {model_path}")
-                return str(model_path)
-        elif model_type.startswith("checkpoint_"):
-            model_path = models_dir / f"{model_type}.zip"
         else:
             print(f"Unknown model_type: {model_type}")
             return None
         
         # Check if model file exists
-        if model_path.exists():
+        if model_path and model_path.exists():
             print(f"Found model: {model_path}")
             return str(model_path)
         else:
             print(f"Model file not found: {model_path}")
             self._show_available_models(models_dir)
             return None
-    
+
     def _load_registry(self):
         """Load experiment registry"""
         if self.registry_path.exists():

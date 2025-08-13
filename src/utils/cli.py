@@ -46,6 +46,9 @@ def create_argument_parser():
     parser.add_argument("--additional-steps", type=int,
                        help="Additional steps for resume training")
     
+    parser.add_argument("--trial-num", type=int,
+                        help="Trial number for testing")
+    
     return parser
 
 
@@ -61,7 +64,9 @@ def map_cli_args_to_config_paths(args):
         "additional_steps": "training.timesteps",
         "run_name": "experiment.name",
         "model_type": "evaluation.model_type",
+        "model_path": "evaluation.model_path",
         "episodes": "evaluation.episodes",
+        "trial_num": "evaluation.trial_to_eval",
     }
     
     # Create new args namespace with mapped names

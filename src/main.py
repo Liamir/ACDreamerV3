@@ -8,6 +8,7 @@ import copy
 import random
 import json
 import csv
+import math
 from pathlib import Path
 from datetime import datetime
 
@@ -127,11 +128,16 @@ def handle_tune_command(cfg, args):
 
             # Sample hyperparameters
             sampled_params = {}
-            for param, (low, high) in search_space.items():
-                if isinstance(low, int) and isinstance(high, int):
-                    value = random.randint(low, high)
-                else:
-                    value = random.uniform(float(low), float(high))
+            for param, (scale, low, high) in search_space.items():
+                if scale == 'linear':
+                    if isinstance(low, int) and isinstance(high, int):
+                        value = random.randint(low, high)
+                    else:
+                        value = random.uniform(float(low), float(high))
+                
+                elif scale == 'log':
+                    value = 10 ** random.uniform(math.log10(low), math.log10(high))
+
                 trial_cfg.algorithm.hyperparameters[param] = value
                 sampled_params[param] = value
 
@@ -163,7 +169,7 @@ def handle_test_command(cfg, args):
     print(f"\n🧪 Starting {cfg.algorithm.name} Testing...")
     
     trainer = create_trainer(cfg)
-    trainer.test(model_path=args.model_path)
+    trainer.test()
     
     print("✅ Testing completed!")
 
@@ -173,7 +179,7 @@ def handle_resume_command(cfg, args):
     print(f"\n🔄 Resuming {cfg.algorithm.name} Training...")
     
     trainer = create_trainer(cfg)
-    trainer.resume(model_path=args.model_path)
+    trainer.resume()
     
     print("✅ Resume training completed!")
 

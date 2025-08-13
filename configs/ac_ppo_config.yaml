@@ -5,7 +5,7 @@ experiment:
     # "CartPole-v1"
     # "Pendulum-v1"
   env_import: "CellGroup-v0"
-  name: "staying_alive_1"
+  name: "term_150K_tune"
   description: "PPO Experiment"
   save_path: "./runs"
   num_envs: 1
@@ -34,11 +34,11 @@ algorithm:
   
   # Core hyperparameters
   hyperparameters:
-    learning_rate: 0.004
-    batch_size: 128
+    learning_rate: 0.001
+    batch_size: 512
     n_epochs: 4
-    n_steps: 4096
-    gamma: 0.998
+    n_steps: 8192
+    gamma: 0.999
     gae_lambda: 0.95
     clip_range: 0.2
     clip_range_vf: null
@@ -53,28 +53,30 @@ algorithm:
     enabled: true
     num_trials: 10
     search_space:
-      learning_rate: [0.001, 0.01]
-      gamma: [0.993, 0.9995]
-      gae_lambda: [0.8, 0.98]
-      clip_range: [0.1, 0.3]
-      ent_coef: [0.0, 0.1]
+      learning_rate: ['linear', 0.001, 0.008]
+      gamma: ['log', 0.997, 0.9999]
+      gae_lambda: ['linear', 0.88, 0.98]
+      clip_range: ['linear', 0.15, 0.25]
+      ent_coef: ['linear', 0.0, 0.1]
 
 training:
-  timesteps: 300000   # used for train and resume
+  timesteps: 150000   # used for train and resume
   
   # Evaluation during training
-  eval_freq: 50000
+  eval_freq: 20000
   n_eval_episodes: 5
   eval_deterministic: true
   
   # Checkpointing
-  save_freq: 100000
+  save_freq: 30000
   save_best_model: true
 
 # Testing/evaluation settings
 evaluation:
   episodes: 3
   model_type: "best"
+  model_path: null
+  trial_to_eval: null
   deterministic: true
   render_mode: "rgb_array"
   save_trajectories: false
