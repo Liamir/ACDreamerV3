@@ -5,7 +5,7 @@ experiment:
     # "CartPole-v1"
     # "Pendulum-v1"
   env_import: "CellGroup-v0"
-  name: "small_lr_no_act_penalty_300k"
+  name: "test_300k"
   description: "PPO Experiment"
   save_path: "./runs"
   num_envs: 1
@@ -30,7 +30,7 @@ normalization:
   norm_reward: false
 
 algorithm:
-  name: "PPO"
+  name: "SAC"
   features_dim: 128
   d_model: 64
   num_heads: 4
@@ -58,8 +58,8 @@ algorithm:
     enabled: true
     num_trials: 10
     search_space:
-      learning_rate: ['log', 9.0e-6, 9.0e-5]
-      # gamma: ['log', 0.99, 0.999]
+      learning_rate: ['log', 0.00001, 0.0008]
+      # gamma: ['log', 0.999, 0.99995]
       # gae_lambda: ['linear', 0.90, 0.99]
       # clip_range: ['linear', 0.05, 0.25]
       # ent_coef: ['linear', 0.03, 0.055]

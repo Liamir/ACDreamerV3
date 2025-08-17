@@ -121,39 +121,49 @@ class BaseTrainer(ABC):
     def test(self):
         """Test a trained model"""
         num_episodes = self.cfg.evaluation.episodes
-
-        # Determine model path
-        if self.cfg.evaluation.model_path:
-            checkpoint_path = self.cfg.evaluation.model_path
-            print(f"Using provided model path: {checkpoint_path}")
+        use_fixed_policy = self.cfg.evaluation.use_fixed_policy
+        
+        if use_fixed_policy:
+            fixed_policy = self.cfg.evaluation.fixed_policy_type
         else:
-            checkpoint_path = self.experiment_manager.find_model_from_config(self.cfg)
-            if not checkpoint_path:
-                print("Could not find model. Please provide model_path or ensure experiment exists.")
+            # Determine model path
+            if self.cfg.evaluation.model_path:
+                checkpoint_path = self.cfg.evaluation.model_path
+                print(f"Using provided model path: {checkpoint_path}")
+            else:
+                checkpoint_path = self.experiment_manager.find_model_from_config(self.cfg)
+                if not checkpoint_path:
+                    print("Could not find model. Please provide model_path or ensure experiment exists.")
+                    return
+            
+            model = self._load_model(checkpoint_path)
+            if model is None:
+                print("Could not load model.")
                 return
         
-        # Load model
-        model = self._load_model(checkpoint_path)
-        if model is None:
-            print("Could not load model.")
-            return
-        
-        # Get initialization options from config
         config_options = self._get_environment_options()
-        
-        # Create test environment
-        env = self._create_environment(config_options, render_mode="human")
-        
-        print(f'Testing model from: {checkpoint_path}')
+
+                
+        if not use_fixed_policy:
+            print(f'Testing model from: {checkpoint_path}')
         print(f'Environment: {self.cfg.experiment.env_import}')
         print(f'Number of episodes: {num_episodes}')
         print("-" * 50)
         
-        # Test episodes
-        episode_rewards, episode_steps = self._run_test_episodes(model, env, num_episodes, config_options)
-        
-        # Print summary
-        self._print_test_summary(episode_rewards, episode_steps)
+        eval_type = self.cfg.evaluation.eval_type
+        if eval_type == "visual":
+            env = self._create_environment(config_options, render_mode="human")
+            # Test episodes
+            if use_fixed_policy:
+                episode_rewards, episode_steps = self._run_test_episodes(None, env, num_episodes, config_options, fixed_policy=fixed_policy)
+            else:
+                episode_rewards, episode_steps = self._run_test_episodes(model, env, num_episodes, config_options)
+
+            self._print_test_summary(episode_rewards, episode_steps)
+
+        elif eval_type == "numeric":
+            env = self._create_environment(config_options, render_mode="rgb_array")
+            episode_rewards, episode_steps, episode_scores = self._compare_test_episodes(model, env, num_episodes, config_options)
         
         env.close()
         return episode_rewards, episode_steps
@@ -297,7 +307,7 @@ class BaseTrainer(ABC):
         
         return env
     
-    def _run_test_episodes(self, model, env, num_episodes, options=None):
+    def _run_test_episodes(self, model, env, num_episodes, options=None, fixed_policy=None):
         """Run test episodes and collect results"""
         episode_rewards = []
         episode_steps = []
@@ -316,7 +326,23 @@ class BaseTrainer(ABC):
             
             print(f'Started episode {episode + 1}')
             while True:
-                action, _states = model.predict(obs, deterministic=True)
+                if fixed_policy:
+                    if fixed_policy == 'MTD':
+                        action = 1
+                    if fixed_policy == 'Adaptive':
+                        pop_norm = obs[-1] + 0.6
+                        if pop_norm <= 0.5:
+                            action = 0
+                        elif pop_norm >= 1.0:
+                            action = 1
+                    if fixed_policy == 'Optimal':
+                        pop_norm = obs[-1] + 0.6
+                        if pop_norm < 1.1:
+                            action = 0
+                        elif pop_norm >= 1.1:
+                            action = 1
+                else:
+                    action, _states = model.predict(obs, deterministic=True)
                 obs, reward, done, truncated, info = env.step(action)
                 env.render()
                 
@@ -331,6 +357,88 @@ class BaseTrainer(ABC):
                     break
         
         return episode_rewards, episode_steps
+    
+    def _compare_test_episodes(self, model, env, num_episodes, options=None):
+        """Run test episodes and collect results"""
+        episode_rewards = []
+        episode_steps = []
+        episode_scores = []
+        
+        for episode in range(num_episodes):
+            # Reset with options for each episode
+            if options:
+                obs, info = env.reset(options=options)
+            else:
+                obs, info = env.reset()
+            
+            # Save initial state for comparison
+            initial_counts = info['counts']
+            
+            reset_options = {
+                'low': {
+                    'tplus_counts': initial_counts[0],
+                    'tprod_counts': initial_counts[1],
+                    'tneg_counts': initial_counts[2]
+                },
+                'high': {
+                    'tplus_counts': initial_counts[0],
+                    'tprod_counts': initial_counts[1],
+                    'tneg_counts': initial_counts[2]
+                }
+            }
+
+            # Test trained model
+            total_reward = 0
+            steps = 0
+            
+            # print(f'Started episode {episode + 1}')
+            # print('initial counts is:', initial_counts)
+
+            while True:
+                action, _states = model.predict(obs, deterministic=True)
+                obs, reward, done, truncated, info = env.step(action)
+                # if episode == 1:
+                #     print('action:', action, 'counts:', info['infos'][0]['counts'])
+                env.render()
+                
+                done = done or truncated
+                total_reward += reward
+                steps += 1
+                
+                if done:
+                    print(f"Episode {episode + 1}: {steps} steps, reward: {total_reward}")
+                    episode_rewards.append(total_reward)
+                    episode_steps.append(steps)
+                    break
+        
+            
+            # Test the optimal policy for the same initial state
+            total_reward = 0
+            steps = 0
+            obs, info = env.reset(options=reset_options)
+            while True:
+                pop_norm = obs[-1] + 0.6
+                if pop_norm < 1.1:
+                    action = 0
+                elif pop_norm >= 1.1:
+                    action = 1
+                obs, reward, done, truncated, info = env.step(action)
+                env.render()
+                
+                done = done or truncated
+                total_reward += reward
+                steps += 1
+                
+                if done:
+                    print(f"Threshold policy (1.1) done in: {steps} steps, reward: {total_reward}")
+                    score = episode_rewards[-1] / total_reward
+                    episode_scores.append(score)
+                    break
+        print('Score compared to threshold policy', episode_scores)
+        print('Average Episode Score:', np.mean(episode_scores))
+        
+        return episode_rewards, episode_steps, episode_scores
+
     
     def _create_callbacks(self, experiment_path, eval_env):
         """Create training callbacks with enhanced TensorBoard logging"""

@@ -13,7 +13,9 @@ from pathlib import Path
 from datetime import datetime
 
 from .utils.cli import create_argument_parser, load_config_with_cli_overrides, print_configuration_summary
-from .trainers.ppo_trainer import PPOTrainer
+# from .trainers.ppo_trainer import PPOTrainer
+from .trainers.ppo_trainer_transformer import PPOTrainer
+from .trainers.sac_trainer import SACTrainer
 from .trainers.dqn_trainer import DQNTrainer
 from .core.experiment import ExperimentManager
 
@@ -26,6 +28,8 @@ def create_trainer(cfg):
         return PPOTrainer(cfg)
     elif algorithm == "dqn":
         return DQNTrainer(cfg)
+    elif algorithm == "sac":
+        return SACTrainer(cfg)
     else:
         supported_algorithms = ["ppo", "dqn"]
         raise ValueError(f"Unsupported algorithm: {algorithm}. Supported: {supported_algorithms}")
@@ -169,8 +173,12 @@ def handle_test_command(cfg, args):
     print(f"\n🧪 Starting {cfg.algorithm.name} Testing...")
     
     trainer = create_trainer(cfg)
-    trainer.test()
-    
+    try:
+        trainer.test()
+    except Exception as e:
+        print(f"Testing failed: {e}")
+        raise
+
     print("✅ Testing completed!")
 
 

@@ -20,7 +20,6 @@ class ProstateCancerTherapyEnv(gym.Env):
         self.dt = dt
         self.params = copy.deepcopy(LV_params)
         self.tp_cap_on_treatment = self.params['tp_cap_on_treatment']
-        self.tp_capacity_off_treatment = self.params['carrying_capacities'][1]
         self.growth_rates = self.params['growth_rates']
         self.competition_matrix = self.params['competition_matrix']
         
@@ -29,16 +28,16 @@ class ProstateCancerTherapyEnv(gym.Env):
         # T+ ratio, TP ratio, T- ratio, total population
         self.ratios_low = np.array([0, 0, 0], dtype=np.float64)
         self.ratios_high = np.array([1, 1, 1], dtype=np.float64)
-        self.population_low = np.array([-2], dtype=np.float64)
-        self.population_high = np.array([2], dtype=np.float64)
-        self.population_ratio_low = np.array([-1], dtype=np.float64)
-        self.population_ratio_high = np.array([1], dtype=np.float64)
+        self.population_low = np.array([0], dtype=np.float64)
+        self.population_high = np.array([np.inf], dtype=np.float64)
+        self.psa_low = np.array([0], dtype=np.float64)
+        self.psa_high = np.array([np.inf], dtype=np.float64)
 
         self.observation_space = gym.spaces.Dict(
             {
                 "ratios": gym.spaces.Box(self.ratios_low, self.ratios_high, dtype=np.float64),
                 "population": gym.spaces.Box(self.population_low, self.population_high, dtype=np.float64),
-                "population_ratio": gym.spaces.Box(self.population_low, self.population_high, dtype=np.float64),
+                "psa": gym.spaces.Box(self.psa_low, self.psa_high, dtype=np.float64),
             }
         )
 
@@ -48,16 +47,15 @@ class ProstateCancerTherapyEnv(gym.Env):
     def _get_obs(self):
         return {
             "ratios": self.counts / self.population_size,
-            "population": np.array([self.population_size]) / 4000.0 - 1,
-            "population_ratio": np.array([self.population_size]) / self.original_population - 0.6,
+            "population": np.array([self.population_size]) / self.original_population,
+            "psa": np.array([self.psa_norm]),
         }
 
     def _get_counts(self):
         """
         Returns: Cell type counts
         """
-        return self.counts
-        # return self.population_size * self._get_obs()["ratios"]
+        return self.population_size * self._get_obs()["ratios"]
 
 
     def _get_info(self):
@@ -76,6 +74,10 @@ class ProstateCancerTherapyEnv(gym.Env):
 
         self.init_options = options or {}
 
+        # Merge passed options with stored init_options
+        # print('INIT OPTIONS:', self.init_options)
+        
+        # Check if we should randomize initialization
         should_randomize = (
             'low' in self.init_options and 'high' in self.init_options and
             any(key in self.init_options['low'] for key in ['tplus_counts', 'tprod_counts', 'tneg_counts'])
@@ -100,6 +102,7 @@ class ProstateCancerTherapyEnv(gym.Env):
             # Set the randomized counts
             self.counts = np.array([tplus_count, tprod_count, tneg_count])
             self.population_size = np.sum(self.counts)
+            self.psa = self.population_size * 2.0
             
             # print(f"Randomized initialization:")
             # print(f"  T+ cells: {tplus_count:.1f}")
@@ -111,6 +114,7 @@ class ProstateCancerTherapyEnv(gym.Env):
             # Use default initialization
             self.population_size = np.sum(self.params['init_counts'])
             self.counts = self.params['init_counts']
+            self.psa = float(self.params['init_psa'])
             
             # print(f"Default initialization:")
             # print(f"  T+ cells: {self.counts[0]:.1f}")
@@ -119,10 +123,14 @@ class ProstateCancerTherapyEnv(gym.Env):
             # print(f"  Total population: {self.population_size:.1f}")
 
         self.original_population = self.population_size
-        self.pop_norm = np.float64(1.0)
+        self.original_psa = self.psa
+        self.psa_norm = np.float64(1.0)
 
         self.carrying_capacities = self.params['carrying_capacities']
         self.carrying_capacities[0] = 1.5 * self.counts[1]
+        self.tp_capacity_off_treatment = self.carrying_capacities[1]
+
+        self.high_psa_streak = 0
 
         observation = self._get_obs()
         info = self._get_info()
@@ -135,6 +143,7 @@ class ProstateCancerTherapyEnv(gym.Env):
         """
 
         self.last_action = action
+        prev_counts = self.counts.copy()
 
         # assume for now there is no treatment
         if action == 0:  # off treatment
@@ -146,28 +155,41 @@ class ProstateCancerTherapyEnv(gym.Env):
         else:
             raise ValueError(f'Illegal action: {action}')
         # apply the LV equation
+        # counts = self._get_counts()
         competition_sums = np.dot(self.competition_matrix, self.counts)  # Shape: (3,)
         competition_effects = competition_sums / self.carrying_capacities  # Shape: (3,)
         self.counts += self.dt * self.growth_rates * self.counts * (1 - competition_effects)
         self.counts = np.where(self.counts < 1.0e-9, 1.0e-9, self.counts)
         self.population_size = self.counts.sum()
 
-        self.pop_norm = self.population_size / self.original_population
+        # update PSA
+        s = np.sum(prev_counts)
+        self.psa += self.dt * (np.sum(prev_counts) - 0.5 * self.psa)
+        self.psa_norm = self.psa / self.original_psa
 
-        truncated = False
+        if self.psa_norm >= 1.2:
+            self.high_psa_streak += 1
+        else:
+            self.high_psa_streak = 0
+
         terminated = False
+        truncated = False
 
-        if self.pop_norm >= 1.2:
+        if self.high_psa_streak >= 100:
             terminated = True
 
+        # reward = (1.0 - self.psa_norm)
+        # if self.psa_norm >= 1.2:
+        #     reward -= 3000.0
         reward = 0.0
 
-        # reward given for every step before progression
-        reward += 0.0005
+        reward += 0.1
+        
+        if action == 1:
+            reward -= 0.01
 
-        # small penalty given for treatment
-        # if action == 1:
-        #     reward -= 0.0001
+        if self.psa_norm >= 1.2:
+            reward -= -0.1     
 
         observation = self._get_obs()
         info = self._get_info()
@@ -191,7 +213,7 @@ class ProstateCancerTherapyEnv(gym.Env):
             ) from e
 
         # Screen dimensions
-        screen_width = 600
+        screen_width = 800
         screen_height = 400
         
         if not hasattr(self, 'screen') or self.screen is None:
@@ -226,13 +248,13 @@ class ProstateCancerTherapyEnv(gym.Env):
         pygame.draw.rect(surf, (0, 0, 0), (bar_x, bar_y, bar_width, bar_height), 2)
         
         # PSA level bar (fill from bottom, based on normalized PSA)
-        psa_ratio = min(self.pop_norm, 2.0) / 2.0  # Cap at 2x original, normalize to 0-1
+        psa_ratio = min(self.psa_norm, 2.0) / 2.0  # Cap at 2x original, normalize to 0-1
         psa_fill_height = int(bar_height * psa_ratio)
         
         # Color based on PSA level
-        if self.pop_norm <= 0.8:
+        if self.psa_norm <= 0.5:
             bar_color = (50, 205, 50)  # Green
-        elif self.pop_norm <= 1.0:
+        elif self.psa_norm <= 1.0:
             bar_color = (255, 165, 0)  # Orange
         else:
             bar_color = (220, 20, 60)  # Red
@@ -242,13 +264,18 @@ class ProstateCancerTherapyEnv(gym.Env):
             fill_y = bar_y + bar_height - psa_fill_height
             pygame.draw.rect(surf, bar_color, (bar_x, fill_y, bar_width, psa_fill_height))
         
+        # 50% target line (horizontal line across the bar)
+        target_y = bar_y + bar_height - int(bar_height * 0.25)  # 50% of PSA = 25% of 2x scale
+        pygame.draw.line(surf, (0, 0, 255), (bar_x - 5, target_y), (bar_x + bar_width + 5, target_y), 3)
+        
         # PSA text labels (positioned around the vertical bar)
-        psa_text = self.font.render(f"Population: {self.pop_norm:.3f}", True, (0, 0, 0))
+        psa_text = self.font.render(f"PSA: {self.psa_norm:.3f}", True, (0, 0, 0))
         surf.blit(psa_text, (bar_x - 10, bar_y - 30))
         
         # Scale labels on the right side of the bar
         scale_labels = [
             (bar_y + bar_height, "0.0"),
+            (target_y, "0.5"),
             (bar_y + bar_height//2, "1.0"),
             (bar_y, "2.0")
         ]
@@ -257,8 +284,12 @@ class ProstateCancerTherapyEnv(gym.Env):
             scale_text = self.small_font.render(label_text, True, (100, 100, 100))
             surf.blit(scale_text, (bar_x + bar_width + 10, label_y - 8))
         
+        # Target label
+        target_text = self.small_font.render("50% Target", True, (0, 0, 255))
+        surf.blit(target_text, (bar_x + bar_width + 45, target_y - 8))
+        
         # Original PSA value at bottom
-        original_text = self.small_font.render(f"Original: {self.original_population:.1f}", True, (100, 100, 100))
+        original_text = self.small_font.render(f"Original: {self.original_psa:.1f}", True, (100, 100, 100))
         surf.blit(original_text, (bar_x - 10, bar_y + bar_height + 10))
 
         # === Cell Distribution Pie Chart (Center-right) ===
@@ -267,10 +298,14 @@ class ProstateCancerTherapyEnv(gym.Env):
         pie_radius = 100  # Adjusted size to fit with legend
         
         # Calculate ratios
-        ratios = self.counts / self.population_size
+        total_cells = np.sum(self.counts)
+        if total_cells > 0:
+            ratios = self.counts / total_cells
+        else:
+            ratios = np.array([0.33, 0.33, 0.34])
         
         # Colors: T+ (light blue), TP (medium blue), T- (red)
-        colors = [(123, 179, 240), (74, 144, 226), (231, 76, 60)]
+        colors = [(74, 144, 226), (123, 179, 240), (231, 76, 60)]
         labels = ["T+", "TP", "T-"]
         
         # Draw pie chart
@@ -292,7 +327,7 @@ class ProstateCancerTherapyEnv(gym.Env):
                     gfxdraw.aapolygon(surf, points_tuples, (0, 0, 0))
                 
                 # Add percentage text
-                if ratio > 0.06:  # Show text if slice is big enough
+                if ratio > 0.03:  # Show text if slice is big enough
                     mid_angle = (start_angle + end_angle) / 2
                     text_x = pie_center_x + (pie_radius * 0.65) * math.cos(math.radians(mid_angle))
                     text_y = pie_center_y + (pie_radius * 0.65) * math.sin(math.radians(mid_angle))
@@ -328,7 +363,7 @@ class ProstateCancerTherapyEnv(gym.Env):
 
         # Total cell count below legend
         count_y = legend_start_y + 35
-        count_text = self.font.render(f"Total Population: {self.population_size:.0f} cells", True, (0, 0, 0))
+        count_text = self.font.render(f"Total Population: {total_cells:.0f} cells", True, (0, 0, 0))
         count_rect = count_text.get_rect(center=(pie_center_x, count_y))
         surf.blit(count_text, count_rect)
 

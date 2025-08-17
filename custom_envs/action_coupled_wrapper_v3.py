@@ -412,7 +412,7 @@ class ActionCoupledWrapper(Wrapper):
             
             # Handle different return formats
             if isinstance(result, tuple):
-                obs = result[0]  # (obs, info) format
+                obs, info = result  # (obs, info) format
             else:
                 obs = result  # Just obs
             
@@ -433,7 +433,7 @@ class ActionCoupledWrapper(Wrapper):
             else:
                 stacked_obs = stacked_obs[:expected_size]
 
-        return stacked_obs.astype(np.float32), {}
+        return stacked_obs.astype(np.float32), info
     
     def _apply_manual_initialization(self, env, options):
         """
