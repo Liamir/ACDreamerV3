@@ -5,13 +5,13 @@ experiment:
     # "CartPole-v1"
     # "Pendulum-v1"
   env_import: "CellGroup-v0"
-  name: "fix_init_env_1_TEST"
+  name: "fix_init_env_1_BULK_TEST"
   description: "PPO Experiment"
   save_path: "./runs"
   num_envs: 4
 
 environment:
-  agent_type: "spatial"  # spatial / bulk
+  agent_type: "bulk"  # spatial / bulk
   init_state_type: "fixed"  # fixed / random
   init_state:
     tplus_counts: [100, 1000, 1000, 324]      # T+ cells minimum count
@@ -56,10 +56,10 @@ algorithm:
     sde_sample_freq: -1
     target_kl: null
 
-    features_dim: 128
-    d_model: 64
-    num_heads: 4
-    num_layers: 2
+    features_dim: 64
+    d_model: 32
+    num_heads: 2
+    num_layers: 1
     dropout: 0.1
 
   tuning:
@@ -73,7 +73,7 @@ algorithm:
       # ent_coef: ['linear', 0.03, 0.055]
 
 training:
-  timesteps: 25000   # used for train and resume
+  timesteps: 30000   # used for train and resume
   
   # Evaluation during training
   eval_freq: 25000

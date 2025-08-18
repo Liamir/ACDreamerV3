@@ -9,7 +9,7 @@ from .base_trainer import BaseTrainer
 from ..models.set_transformer import SetTransformerExtractor
 
 
-class PPOTrainer(BaseTrainer):
+class PPOTrainerTransformer(BaseTrainer):
     """PPO Training Manager - inherits common functionality from BaseTrainer"""
     
     def _create_model(self, env, experiment_path):

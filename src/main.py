@@ -13,8 +13,8 @@ from pathlib import Path
 from datetime import datetime
 
 from .utils.cli import create_argument_parser, load_config_with_cli_overrides, print_configuration_summary
-# from .trainers.ppo_trainer import PPOTrainer
-from .trainers.ppo_trainer_transformer import PPOTrainer
+from .trainers.ppo_trainer import PPOTrainer
+from .trainers.ppo_trainer_transformer import PPOTrainerTransformer
 from .trainers.sac_trainer import SACTrainer
 from .trainers.dqn_trainer import DQNTrainer
 from .core.experiment import ExperimentManager
@@ -25,7 +25,10 @@ def create_trainer(cfg):
     algorithm = cfg.algorithm.name.lower()
     
     if algorithm == "ppo":
-        return PPOTrainer(cfg)
+        if cfg.environment.agent_type == 'spatial':
+            return PPOTrainerTransformer(cfg)
+        elif cfg.environment.agent_type == 'bulk':
+            return PPOTrainer(cfg)
     elif algorithm == "dqn":
         return DQNTrainer(cfg)
     elif algorithm == "sac":

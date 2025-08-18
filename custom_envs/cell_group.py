@@ -15,30 +15,30 @@ class ProstateCancerTherapyEnv(gym.Env):
         'render_fps': 30,
     }
 
-    def __init__(self, LV_params, dt=0.01, render_mode='rgb_array'):
+    def __init__(self, LV_params, dt=0.01, render_mode='rgb_array', k=1):
         self.render_mode = render_mode
         self.dt = dt
+        self.k = k
+        self.population_scale = 4000.0 / k
         self.params = copy.deepcopy(LV_params)
         self.tp_cap_on_treatment = self.params['tp_cap_on_treatment']
         self.tp_capacity_off_treatment = self.params['carrying_capacities'][1]
         self.growth_rates = self.params['growth_rates']
         self.competition_matrix = self.params['competition_matrix']
         
-        # the observation should be the counts of all cell types.
-        # these can be either direct count data, or ratio with another total population entry.
-        # T+ ratio, TP ratio, T- ratio, total population
+        # T+ ratio, TP ratio, T- ratio
         self.ratios_low = np.array([0, 0, 0], dtype=np.float64)
         self.ratios_high = np.array([1, 1, 1], dtype=np.float64)
-        self.population_low = np.array([-2], dtype=np.float64)
-        self.population_high = np.array([2], dtype=np.float64)
-        self.population_ratio_low = np.array([-1], dtype=np.float64)
-        self.population_ratio_high = np.array([1], dtype=np.float64)
+        self.population_low = np.array([-1], dtype=np.float64)
+        self.population_high = np.array([np.inf], dtype=np.float64)
+        # self.population_ratio_low = np.array([-1], dtype=np.float64)
+        # self.population_ratio_high = np.array([1], dtype=np.float64)
 
         self.observation_space = gym.spaces.Dict(
             {
                 "ratios": gym.spaces.Box(self.ratios_low, self.ratios_high, dtype=np.float64),
                 "population": gym.spaces.Box(self.population_low, self.population_high, dtype=np.float64),
-                "population_ratio": gym.spaces.Box(self.population_low, self.population_high, dtype=np.float64),
+                # "population_ratio": gym.spaces.Box(self.population_low, self.population_high, dtype=np.float64),
             }
         )
 
@@ -48,8 +48,8 @@ class ProstateCancerTherapyEnv(gym.Env):
     def _get_obs(self):
         return {
             "ratios": self.counts / self.population_size,
-            "population": np.array([self.population_size]) / 4000.0 - 1,
-            "population_ratio": np.array([self.population_size]) / self.original_population - 0.6,
+            "population": np.array([self.population_size]) / self.population_scale - 1,
+            # "population_ratio": np.array([self.population_size]) / self.original_population - 0.6,
         }
 
     def _get_counts(self):

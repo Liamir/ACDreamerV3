@@ -18,7 +18,7 @@ import traceback
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 import custom_envs
-from custom_envs.action_coupled_wrapper_v3 import ActionCoupledWrapper
+from custom_envs.action_coupled_wrapper import ActionCoupledWrapper
 from custom_envs.normalization_wrapper import NormalizationWrapper
 from ..core.tensorboard_callback import CustomTensorboardCallback
 from ..core.experiment import ExperimentManager, print_env_info
@@ -287,10 +287,12 @@ class BaseTrainer(ABC):
             env_fn=lambda render_mode=render_mode: gym.make(
                 env_import,
                 LV_params=LV_params,
-                render_mode=render_mode),
+                render_mode=render_mode,
+                k=k),
             k=k,
             render_mode=render_mode if not for_evaluation else None,
             options=options,
+            cfg=self.cfg.environment,
         )
         
         # Add normalization wrapper
