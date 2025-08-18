@@ -17,14 +17,19 @@ class PPOTrainer(BaseTrainer):
         tensorboard_path = Path(experiment_path) / "logs" / "tensorboard"
         tensorboard_path.mkdir(parents=True, exist_ok=True)
 
-        num_envs = self.cfg.experiment.num_envs
+        if hasattr(env, "k"):
+            num_envs = env.k
+        else:
+            num_envs = self.cfg.experiment.num_envs
+            print(f"Warning: Could not detect num_envs from environment, using config value: {num_envs}")
 
         set_transformer_config = {
-            "features_dim": getattr(self.cfg.algorithm, 'features_dim', 128),
-            "d_model": getattr(self.cfg.algorithm, 'd_model', 64),
-            "num_heads": getattr(self.cfg.algorithm, 'num_heads', 4),
-            "num_layers": getattr(self.cfg.algorithm, 'num_layers', 2),
-            "dropout": getattr(self.cfg.algorithm, 'dropout', 0.1),
+            "num_envs": num_envs,
+            "features_dim": getattr(self.cfg.algorithm.hyperparameters, 'features_dim', 128),
+            "d_model": getattr(self.cfg.algorithm.hyperparameters, 'd_model', 64),
+            "num_heads": getattr(self.cfg.algorithm.hyperparameters, 'num_heads', 4),
+            "num_layers": getattr(self.cfg.algorithm.hyperparameters, 'num_layers', 2),
+            "dropout": getattr(self.cfg.algorithm.hyperparameters, 'dropout', 0.1),
         }
 
         model = PPO(
@@ -47,22 +52,10 @@ class PPOTrainer(BaseTrainer):
             target_kl=self.cfg.algorithm.hyperparameters.target_kl,
             tensorboard_log=str(tensorboard_path),
             device='cpu',
-            # policy_kwargs={
-            #     "net_arch": [
-            #         dict(
-            #             pi=[128, 128],  # Policy network: 2 hidden layers with 128 units each
-            #             vf=[128, 128]   # Value network: 2 hidden layers with 128 units each
-            #         )
-            #     ],
-            # }
-            # policy_kwargs={
-            #     "features_extractor_class": SetTransformerExtractor,
-            #     "features_extractor_kwargs": {
-            #         "num_envs": 1,
-            #         **set_transformer_config
-            #     },
-            #     "net_arch": [dict(pi=[128, 128], vf=[128, 128])]
-            # }
+            policy_kwargs={
+                "features_extractor_class": SetTransformerExtractor,
+                "features_extractor_kwargs": set_transformer_config,
+            }
         )
         
         return model

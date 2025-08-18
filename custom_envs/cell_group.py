@@ -107,16 +107,16 @@ class ProstateCancerTherapyEnv(gym.Env):
             # print(f"  T- cells: {tneg_count:.1f}")
             # print(f"  Total population: {self.population_size:.1f}")
             
-        else:
-            # Use default initialization
+        elif any(key in self.init_options for key in ['tplus_counts', 'tprod_counts', 'tneg_counts']):
+            tplus_count = self.init_options['tplus_counts']
+            tprod_count = self.init_options['tprod_counts']
+            tneg_count = self.init_options['tneg_counts']
+            self.counts = np.array([tplus_count, tprod_count, tneg_count])
+            self.population_size = np.sum(self.counts)
+        
+        else:  # Use default initialization from fixed LV_params
             self.population_size = np.sum(self.params['init_counts'])
             self.counts = self.params['init_counts']
-            
-            # print(f"Default initialization:")
-            # print(f"  T+ cells: {self.counts[0]:.1f}")
-            # print(f"  TP cells: {self.counts[1]:.1f}")
-            # print(f"  T- cells: {self.counts[2]:.1f}")
-            # print(f"  Total population: {self.population_size:.1f}")
 
         self.original_population = self.population_size
         self.pop_norm = np.float64(1.0)
@@ -157,8 +157,9 @@ class ProstateCancerTherapyEnv(gym.Env):
         truncated = False
         terminated = False
 
-        if self.pop_norm >= 1.2:
-            terminated = True
+        # termination controlled by the action coupled model
+        # if self.pop_norm >= 1.2:
+        #     terminated = True
 
         reward = 0.0
 

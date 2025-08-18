@@ -5,24 +5,31 @@ experiment:
     # "CartPole-v1"
     # "Pendulum-v1"
   env_import: "CellGroup-v0"
-  name: "small_lr_no_act_penalty_300k"
+  name: "fix_init_env_1_TEST"
   description: "PPO Experiment"
   save_path: "./runs"
-  num_envs: 1
+  num_envs: 4
 
 environment:
-  init_low:
-    tplus_counts: 100      # T+ cells minimum count
-    tprod_counts: 100     # TP cells minimum count  
-    tneg_counts: 1.0e-9   # T- cells minimum count (near zero)
+  agent_type: "spatial"  # spatial / bulk
+  init_state_type: "fixed"  # fixed / random
+  init_state:
+    tplus_counts: [100, 1000, 1000, 324]      # T+ cells minimum count
+    tprod_counts: [1000, 130, 900, 1000]     # TP cells minimum count  
+    tneg_counts: [1.0e-9, 1.0e-9, 1.0e-9, 1.0e-9]   # T- cells minimum count (near zero)
+
+  # init_low:
+  #   tplus_counts: 2424      # T+ cells minimum count
+  #   tprod_counts: 3030     # TP cells minimum count  
+  #   tneg_counts: 1.0e-9   # T- cells minimum count (near zero)
     
-  init_high:
-    tplus_counts: 4000    # T+ cells maximum count
-    tprod_counts: 4000   # TP cells maximum count
-    tneg_counts: 1.0e-6      # T- cells maximum count
+  # init_high:
+  #   tplus_counts: 2424    # T+ cells maximum count
+  #   tprod_counts: 3030   # TP cells maximum count
+  #   tneg_counts: 1.0e-9      # T- cells maximum count
 
   reward_type: "avg"  # min / avg / sum
-  termination_type: "first"  # first / half / all
+  termination_type: null  # first / half / all
 
 normalization:
   enabled: false
@@ -31,15 +38,10 @@ normalization:
 
 algorithm:
   name: "PPO"
-  features_dim: 128
-  d_model: 64
-  num_heads: 4
-  num_layers: 2
-  dropout: 0.1
   
   # Core hyperparameters
   hyperparameters:
-    learning_rate: 0.004
+    learning_rate: 3.0e-4
     batch_size: 256
     n_epochs: 10
     n_steps: 8192
@@ -47,41 +49,47 @@ algorithm:
     gae_lambda: 0.98
     clip_range: 0.2
     clip_range_vf: null
-    ent_coef: 0.03
+    ent_coef: 0.02
     vf_coef: 0.5
     max_grad_norm: 0.5
     use_sde: false
     sde_sample_freq: -1
     target_kl: null
 
+    features_dim: 128
+    d_model: 64
+    num_heads: 4
+    num_layers: 2
+    dropout: 0.1
+
   tuning:
     enabled: true
-    num_trials: 10
+    num_trials: 5
     search_space:
-      learning_rate: ['log', 9.0e-6, 9.0e-5]
+      learning_rate: ['log', 3.0e-4, 3.0e-4]
       # gamma: ['log', 0.99, 0.999]
       # gae_lambda: ['linear', 0.90, 0.99]
       # clip_range: ['linear', 0.05, 0.25]
       # ent_coef: ['linear', 0.03, 0.055]
 
 training:
-  timesteps: 300000   # used for train and resume
+  timesteps: 25000   # used for train and resume
   
   # Evaluation during training
-  eval_freq: 20000
-  n_eval_episodes: 8
+  eval_freq: 25000
+  n_eval_episodes: 12
   eval_deterministic: true
   
   # Checkpointing
-  save_freq: 250000
+  save_freq: 600000
   save_best_model: true
 
 # Testing/evaluation settings
 evaluation:
-  eval_type: "numeric"  # visual / numeric
+  eval_type: "visual"  # visual / numeric
   use_fixed_policy: false
   fixed_policy_type: "Optimal"  # MTD / Adaptive / Optimal
-  episodes: 3
+  episodes: 1
   model_type: "best"
   model_path: null
   trial_to_eval: null

@@ -380,16 +380,12 @@ class ActionCoupledWrapper(Wrapper):
             if self.seeds is not None:
                 self.seeds = [seed + i for i in range(self.k)]
                 logging.info(f"Updated environment seeds to: {self.seeds}")
-            
-            # # Also check for direct range specifications
-            # if 'low' in options and 'high' in options:
-            #     # For environments like MountainCar that use low/high directly
-            #     pass  # Keep the original options
         
         reset_options = options or self.init_options
         
         # Reset environments
         observations = []
+        self.total_initial_population = 0.0
         for i, env in enumerate(self.envs):
             reset_seed = None if self.seeds is None else self.seeds[i]
             
@@ -399,7 +395,9 @@ class ActionCoupledWrapper(Wrapper):
             
             # Reset and get observation
             try:
-                result = env.reset(seed=reset_seed, options=reset_options)
+                subenv_options = {cell_type: counts[i] for cell_type, counts in reset_options['init_state'].items()}
+                self.total_initial_population += np.sum(list(subenv_options.values()))
+                result = env.reset(seed=reset_seed, options=subenv_options)
             except TypeError:
                 # Fallback for environments that don't support options
                 print(f'Failed to automatically set the initial state ranges. Trying to set them manually.')
@@ -483,9 +481,11 @@ class ActionCoupledWrapper(Wrapper):
         
     def step(self, action):
         obs, rewards, dones, truncs, infos = [], [], [], [], []
+        total_counts = np.zeros(shape=(3), dtype=np.float64)
         
         # Use the same action for all active environments
         for i, env in enumerate(self.envs):
+            total_counts += env.unwrapped.counts
             if not self.terminated_envs[i]:
                 # Only step environments that haven't terminated yet
                 with self._seed_context(i):  # Use seed context to maintain determinism
@@ -527,7 +527,16 @@ class ActionCoupledWrapper(Wrapper):
         # Stack observations into a single vector
         stacked_obs = np.concatenate(obs)
 
-        done_flags = [d or t for d, t in zip(dones, truncs)]
+        # self.pop_norm = self.population_size / self.original_population
+        total_population = total_counts.sum()
+        pop_norm = total_population / self.total_initial_population
+        print(f'{total_population = }')
+        print(f'{pop_norm = }')
+        done = False
+        if pop_norm >= 1.2:
+            done = True
+
+        # done_flags = [d or t for d, t in zip(dones, truncs)]
         # Log number of active environments
         active_envs = sum(1 for d in self.terminated_envs if not d)
         if active_envs < self.k:  # Only log when some environments are done
@@ -547,14 +556,14 @@ class ActionCoupledWrapper(Wrapper):
         else:
             print(f'Warning: reward type: {self.reward_type} not supported.')
 
-        if self.termination_type == 'first':
-            done = any(done_flags)
-        elif self.termination_type == 'half':
-            done = sum(done_flags) >= self.k - self.k // 2
-        elif self.termination_type == 'all':
-            done = all(done_flags)
-        else:
-            print(f'Warning: termination type: {self.termination_type} not supported.')
+        # if self.termination_type == 'first':
+        #     done = any(done_flags)
+        # elif self.termination_type == 'half':
+        #     done = sum(done_flags) >= self.k - self.k // 2
+        # elif self.termination_type == 'all':
+        #     done = all(done_flags)
+        # else:
+        #     print(f'Warning: termination type: {self.termination_type} not supported.')
 
         return stacked_obs.astype(np.float32), reward, done, False, {"individual_rewards": rewards, "infos": infos}
     

@@ -30,23 +30,28 @@ class BaseTrainer(ABC):
     def __init__(self, cfg):
         self.cfg = cfg
         self.experiment_manager = ExperimentManager(cfg.experiment.save_path)
-    
+
     def _get_environment_options(self):
         """Extract initialization options from config"""
+        config = self.cfg.environment
         options = {}
-        
-        # Check if initialization ranges are specified in config
-        if hasattr(self.cfg.environment, 'init_low') and hasattr(self.cfg.environment, 'init_high'):
-            init_low = getattr(self.cfg.environment, 'init_low', None)
-            init_high = getattr(self.cfg.environment, 'init_high', None)
-            
-            if init_low is not None and init_high is not None:
-                options['low'] = dict(init_low) if hasattr(init_low, '_asdict') else init_low
-                options['high'] = dict(init_high) if hasattr(init_high, '_asdict') else init_high
+
+        if config.init_state_type == "random":
+            if hasattr(self.cfg.environment, 'init_low') and hasattr(self.cfg.environment, 'init_high'):
+                init_low = getattr(self.cfg.environment, 'init_low', None)
+                init_high = getattr(self.cfg.environment, 'init_high', None)
                 
-                print(f"Using custom initialization ranges:")
-                print(f"  Low: {options['low']}")
-                print(f"  High: {options['high']}")
+                if init_low is not None and init_high is not None:
+                    options['low'] = dict(init_low) if hasattr(init_low, '_asdict') else init_low
+                    options['high'] = dict(init_high) if hasattr(init_high, '_asdict') else init_high
+                    
+                    print(f"Using custom initialization ranges:")
+                    print(f"  Low: {options['low']}")
+                    print(f"  High: {options['high']}")
+        
+        elif config.init_state_type == "fixed":
+            init_state = config.init_state
+            options['init_state'] = dict(init_state) if hasattr(init_state, '_asdict') else init_state
         
         if hasattr(self.cfg.environment, 'reward_type'):
             reward_type = getattr(self.cfg.environment, 'reward_type')
@@ -300,10 +305,11 @@ class BaseTrainer(ABC):
             env = Monitor(env)
         
         # Reset with options if provided
-        if options is not None:
-            env.reset(options=options)
-        else:
-            env.reset()
+        # if options is not None:
+        #     env.reset(options=options)
+        # else:
+        #     env.reset()
+        env.reset()
         
         return env
     
