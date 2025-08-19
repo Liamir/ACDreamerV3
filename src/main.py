@@ -9,6 +9,7 @@ import random
 import json
 import csv
 import math
+import traceback
 from pathlib import Path
 from datetime import datetime
 
@@ -178,8 +179,12 @@ def handle_test_command(cfg, args):
     trainer = create_trainer(cfg)
     try:
         trainer.test()
+    # except Exception as e:
+    #     print(f"Testing failed: {e}")
+    #     raise
     except Exception as e:
-        print(f"Testing failed: {e}")
+        error_message = traceback.format_exc()
+        print(f"Training failed with traceback:\n{error_message}")
         raise
 
     print("✅ Testing completed!")

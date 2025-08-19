@@ -33,25 +33,25 @@ class BaseTrainer(ABC):
 
     def _get_environment_options(self):
         """Extract initialization options from config"""
-        config = self.cfg.environment
         options = {}
 
-        if config.init_state_type == "random":
-            if hasattr(self.cfg.environment, 'init_low') and hasattr(self.cfg.environment, 'init_high'):
-                init_low = getattr(self.cfg.environment, 'init_low', None)
-                init_high = getattr(self.cfg.environment, 'init_high', None)
+        if hasattr(self.cfg.environment, 'init_low') and hasattr(self.cfg.environment, 'init_high'):
+            init_low = getattr(self.cfg.environment, 'init_low', None)
+            init_high = getattr(self.cfg.environment, 'init_high', None)
+            
+            if init_low is not None and init_high is not None:
+                options['low'] = dict(init_low) if hasattr(init_low, '_asdict') else init_low
+                options['high'] = dict(init_high) if hasattr(init_high, '_asdict') else init_high
                 
-                if init_low is not None and init_high is not None:
-                    options['low'] = dict(init_low) if hasattr(init_low, '_asdict') else init_low
-                    options['high'] = dict(init_high) if hasattr(init_high, '_asdict') else init_high
-                    
-                    print(f"Using custom initialization ranges:")
-                    print(f"  Low: {options['low']}")
-                    print(f"  High: {options['high']}")
+                print(f"Using custom initialization ranges:")
+                print(f"  Low: {options['low']}")
+                print(f"  High: {options['high']}")
         
-        elif config.init_state_type == "fixed":
-            init_state = config.init_state
+        print('before init_state')
+        if hasattr(self.cfg.environment, 'init_state'):
+            init_state = self.cfg.environment.init_state
             options['init_state'] = dict(init_state) if hasattr(init_state, '_asdict') else init_state
+        print('after init_state')
         
         if hasattr(self.cfg.environment, 'reward_type'):
             reward_type = getattr(self.cfg.environment, 'reward_type')
@@ -126,9 +126,9 @@ class BaseTrainer(ABC):
     def test(self):
         """Test a trained model"""
         num_episodes = self.cfg.evaluation.episodes
-        use_fixed_policy = self.cfg.evaluation.use_fixed_policy
+        test_only_fixed_policy = self.cfg.evaluation.test_only_fixed_policy
         
-        if use_fixed_policy:
+        if test_only_fixed_policy:
             fixed_policy = self.cfg.evaluation.fixed_policy_type
         else:
             # Determine model path
@@ -149,7 +149,7 @@ class BaseTrainer(ABC):
         config_options = self._get_environment_options()
 
                 
-        if not use_fixed_policy:
+        if not test_only_fixed_policy:
             print(f'Testing model from: {checkpoint_path}')
         print(f'Environment: {self.cfg.experiment.env_import}')
         print(f'Number of episodes: {num_episodes}')
@@ -159,7 +159,7 @@ class BaseTrainer(ABC):
         if eval_type == "visual":
             env = self._create_environment(config_options, render_mode="human")
             # Test episodes
-            if use_fixed_policy:
+            if test_only_fixed_policy:
                 episode_rewards, episode_steps = self._run_test_episodes(None, env, num_episodes, config_options, fixed_policy=fixed_policy)
             else:
                 episode_rewards, episode_steps = self._run_test_episodes(model, env, num_episodes, config_options)
@@ -378,29 +378,12 @@ class BaseTrainer(ABC):
                 obs, info = env.reset(options=options)
             else:
                 obs, info = env.reset()
-            
-            # Save initial state for comparison
-            initial_counts = info['counts']
-            
-            reset_options = {
-                'low': {
-                    'tplus_counts': initial_counts[0],
-                    'tprod_counts': initial_counts[1],
-                    'tneg_counts': initial_counts[2]
-                },
-                'high': {
-                    'tplus_counts': initial_counts[0],
-                    'tprod_counts': initial_counts[1],
-                    'tneg_counts': initial_counts[2]
-                }
-            }
 
             # Test trained model
             total_reward = 0
             steps = 0
             
-            # print(f'Started episode {episode + 1}')
-            # print('initial counts is:', initial_counts)
+            print(f'Started episode {episode + 1}')
 
             while True:
                 action, _states = model.predict(obs, deterministic=True)
@@ -423,12 +406,12 @@ class BaseTrainer(ABC):
             # Test the optimal policy for the same initial state
             total_reward = 0
             steps = 0
-            obs, info = env.reset(options=reset_options)
+            obs, info = env.reset(options=options)
             while True:
                 pop_norm = obs[-1] + 0.6
-                if pop_norm < 1.1:
+                if pop_norm < 1.15:
                     action = 0
-                elif pop_norm >= 1.1:
+                elif pop_norm >= 1.15:
                     action = 1
                 obs, reward, done, truncated, info = env.step(action)
                 env.render()
@@ -438,7 +421,7 @@ class BaseTrainer(ABC):
                 steps += 1
                 
                 if done:
-                    print(f"Threshold policy (1.1) done in: {steps} steps, reward: {total_reward}")
+                    print(f"Threshold policy (1.15) done in: {steps} steps, reward: {total_reward}")
                     score = episode_rewards[-1] / total_reward
                     episode_scores.append(score)
                     break

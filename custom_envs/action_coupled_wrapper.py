@@ -419,7 +419,7 @@ class ActionCoupledWrapper(Wrapper):
         # Stack all observations into a single vector
         stacked_obs = np.concatenate(observations)
         if self.cfg.agent_type == 'spatial':
-            initial_pop_norm = np.array([1.0], dtype=np.float64)
+            initial_pop_norm = np.array([0.4], dtype=np.float64)
             final_observation = np.concatenate([stacked_obs, initial_pop_norm])
 
         elif self.cfg.agent_type == 'bulk':
@@ -538,6 +538,7 @@ class ActionCoupledWrapper(Wrapper):
         if pop_norm >= 1.2:
             done = True
     
+        # print(f'{pop_norm = }')
 
         # done_flags = [d or t for d, t in zip(dones, truncs)]
         # Log number of active environments
@@ -568,18 +569,17 @@ class ActionCoupledWrapper(Wrapper):
         # else:
         #     print(f'Warning: termination type: {self.termination_type} not supported.')
 
+        scaled_pop_norm = pop_norm - 0.6
         if self.cfg.agent_type == 'spatial':
             stacked_obs = np.concatenate(obs)
-            final_observation = np.concatenate([stacked_obs, np.array([pop_norm], dtype=np.float64)])
+            final_observation = np.concatenate([stacked_obs, np.array([scaled_pop_norm], dtype=np.float64)])
         elif self.cfg.agent_type == 'bulk':
-            total_population = total_counts.sum()
             scaled_population = total_population / 4000.0 - 1
             ratios = total_counts / total_population
-            pop_norm = total_population / self.total_initial_population
             final_observation = np.concatenate([
                 ratios, 
                 np.array([scaled_population]), 
-                np.array([pop_norm])
+                np.array([scaled_pop_norm])
             ])
 
         return final_observation, reward, done, False, {"individual_rewards": rewards, "infos": infos}

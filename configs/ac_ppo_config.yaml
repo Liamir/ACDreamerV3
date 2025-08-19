@@ -5,18 +5,17 @@ experiment:
     # "CartPole-v1"
     # "Pendulum-v1"
   env_import: "CellGroup-v0"
-  name: "fix_init_env_1_BULK_TEST"
+  name: "fixed_init_spatial_3MDK_lr_tune"
   description: "PPO Experiment"
   save_path: "./runs"
-  num_envs: 4
+  num_envs: 9
 
 environment:
-  agent_type: "bulk"  # spatial / bulk
-  init_state_type: "fixed"  # fixed / random
+  agent_type: "spatial"  # spatial / bulk
   init_state:
-    tplus_counts: [100, 1000, 1000, 324]      # T+ cells minimum count
-    tprod_counts: [1000, 130, 900, 1000]     # TP cells minimum count  
-    tneg_counts: [1.0e-9, 1.0e-9, 1.0e-9, 1.0e-9]   # T- cells minimum count (near zero)
+    tplus_counts: [25, 25, 50, 300, 700, 200, 800, 24, 300]      # T+ cells minimum count
+    tprod_counts: [800, 200, 100, 30, 400, 500, 200, 600, 200]     # TP cells minimum count  
+    tneg_counts: [3.0e-6, 1.0e-6, 4.0e-6, 1.0e-6, 1.0e-6, 1.0e-6, 9.0e-7, 1.0e-6, 3.0e-6]   # T- cells minimum count (near zero)
 
   # init_low:
   #   tplus_counts: 2424      # T+ cells minimum count
@@ -30,6 +29,7 @@ environment:
 
   reward_type: "avg"  # min / avg / sum
   termination_type: null  # first / half / all
+  # terminating when total population reaches x1.2 from starting population
 
 normalization:
   enabled: false
@@ -64,20 +64,20 @@ algorithm:
 
   tuning:
     enabled: true
-    num_trials: 5
+    num_trials: 10
     search_space:
-      learning_rate: ['log', 3.0e-4, 3.0e-4]
+      learning_rate: ['log', 1.0e-5, 5.0e-3]
       # gamma: ['log', 0.99, 0.999]
       # gae_lambda: ['linear', 0.90, 0.99]
       # clip_range: ['linear', 0.05, 0.25]
       # ent_coef: ['linear', 0.03, 0.055]
 
 training:
-  timesteps: 30000   # used for train and resume
+  timesteps: 3500000   # used for train and resume
   
   # Evaluation during training
   eval_freq: 25000
-  n_eval_episodes: 12
+  n_eval_episodes: 1  # one is enough when initial state is fixed
   eval_deterministic: true
   
   # Checkpointing
@@ -86,8 +86,8 @@ training:
 
 # Testing/evaluation settings
 evaluation:
-  eval_type: "visual"  # visual / numeric
-  use_fixed_policy: false
+  eval_type: "numeric"  # visual / numeric
+  test_only_fixed_policy: false
   fixed_policy_type: "Optimal"  # MTD / Adaptive / Optimal
   episodes: 1
   model_type: "best"
