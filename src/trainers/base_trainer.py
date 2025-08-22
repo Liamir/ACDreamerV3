@@ -345,9 +345,9 @@ class BaseTrainer(ABC):
                             action = 1
                     if fixed_policy == 'Optimal':
                         pop_norm = obs[-1] + 0.6
-                        if pop_norm < 1.1:
+                        if pop_norm < 1.16:
                             action = 0
-                        elif pop_norm >= 1.1:
+                        elif pop_norm >= 1.16:
                             action = 1
                 else:
                     action, _states = model.predict(obs, deterministic=True)
@@ -406,12 +406,13 @@ class BaseTrainer(ABC):
             # Test the optimal policy for the same initial state
             total_reward = 0
             steps = 0
+            THRESHOLD = 1.16
             obs, info = env.reset(options=options)
             while True:
                 pop_norm = obs[-1] + 0.6
-                if pop_norm < 1.15:
+                if pop_norm < THRESHOLD:
                     action = 0
-                elif pop_norm >= 1.15:
+                elif pop_norm >= THRESHOLD:
                     action = 1
                 obs, reward, done, truncated, info = env.step(action)
                 env.render()
@@ -421,7 +422,7 @@ class BaseTrainer(ABC):
                 steps += 1
                 
                 if done:
-                    print(f"Threshold policy (1.15) done in: {steps} steps, reward: {total_reward}")
+                    print(f"Threshold policy ({THRESHOLD}) done in: {steps} steps, reward: {total_reward}")
                     score = episode_rewards[-1] / total_reward
                     episode_scores.append(score)
                     break
