@@ -29,7 +29,7 @@ class NormalizationWrapper(gym.Wrapper):
         for i in range(0, 4 * self.k, 4):
             # log normalization for cell ratio observations (large range)
             # c's should be in the range (1e-9, 1e3)
-            obs[i : i+3] = (np.log10(obs[i : i+3]) - (-9.0)) / (3.0 - (-9.0))
+            obs[i : i+3] = ((np.log10(obs[i : i+3]) - (-9.0)) / (3.0 - (-9.0))) * 2 - 1
 
             # linear normalization for population
             # p's should be in the range (1e2, 1e4)

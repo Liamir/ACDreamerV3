@@ -88,7 +88,11 @@ class ActionCoupledWrapper(Wrapper):
             self.envs.append(env)
         
         single_obs_space = self.envs[0].observation_space
-        self.action_space = self.envs[0].action_space
+
+        if self.cfg.stochastic_action:
+            self.action_space = gym.spaces.Box(low=-10.0, high=10.0, shape=(1,), dtype=np.float64)
+        else:
+            self.action_space = gym.spaces.Discrete(2)
 
         if self.cfg.agent_type == 'spatial':
             stacked_space = self._create_stacked_observation_space(single_obs_space, k)
@@ -496,9 +500,22 @@ class ActionCoupledWrapper(Wrapper):
 
 
         # Growth (get next counts from the ODE, using the same action for all envs)
+        if self.cfg.stochastic_action:
+            treatment_prob = 1 / (1 + np.exp(-action[0]))
+            n_treated = int(treatment_prob * self.k)
+            if n_treated > 0:
+                treated_indices = set(self.rng.choice(self.k, size=n_treated, replace=False))
+            else:
+                treated_indices = set()
+
         for i, env in enumerate(self.envs):
+            if self.cfg.stochastic_action:
+                binary_action = 1 if i in treated_indices else 0
+            else:
+                binary_action = action
+
             with self._seed_context(i):  # Use seed context to maintain determinism
-                result = env.step(action)
+                result = env.step(binary_action)
                 
                 # Handle different return formats (gym vs gymnasium)
                 if len(result) == 4:

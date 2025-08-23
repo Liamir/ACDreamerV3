@@ -27,6 +27,7 @@ environment:
   #   tprod_counts: 3030   # TP cells maximum count
   #   tneg_counts: 1.0e-9      # T- cells maximum count
 
+  stochastic_action: false
   reward_type: "avg"  # min / avg / sum
   termination_type: null  # first / half / all
   # terminating when total population reaches x1.2 from starting population
@@ -87,7 +88,7 @@ training:
 # Testing/evaluation settings
 evaluation:
   eval_type: "visual"  # visual / numeric
-  test_only_fixed_policy: true
+  test_only_fixed_policy: false
   fixed_policy_type: "MTD"  # MTD / Adaptive / Optimal
   episodes: 1
   model_type: "best"
