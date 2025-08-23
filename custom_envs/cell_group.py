@@ -178,9 +178,9 @@ class ProstateCancerTherapyEnv(gym.Env):
                 'pygame is not installed, run `pip install "gymnasium[classic-control]"`'
             ) from e
 
-        # Screen dimensions
-        screen_width = 600
-        screen_height = 400
+        # Screen dimensions - very compact layout
+        screen_width = 250
+        screen_height = 250
         
         if not hasattr(self, 'screen') or self.screen is None:
             pygame.init()
@@ -200,13 +200,13 @@ class ProstateCancerTherapyEnv(gym.Env):
 
         # Font for text rendering
         if not hasattr(self, 'font') or self.font is None:
-            self.font = pygame.font.Font(None, 24)
-            self.small_font = pygame.font.Font(None, 18)
+            self.font = pygame.font.Font(None, 26)
+            self.small_font = pygame.font.Font(None, 22)
 
-        # === Cell Distribution Pie Chart (Center-right) ===
-        pie_center_x = 400  # Fixed center position to ensure it fits
-        pie_center_y = screen_height // 2
-        pie_radius = 100  # Adjusted size to fit with legend
+        # === Cell Distribution Pie Chart (Centered with minimal margins) ===
+        pie_center_x = screen_width // 2
+        pie_center_y = screen_height // 2 - 5  # Slightly higher to balance with text below
+        pie_radius = 70  # Slightly larger pie chart
         
         # Calculate ratios
         ratios = self.counts / self.population_size
@@ -215,6 +215,16 @@ class ProstateCancerTherapyEnv(gym.Env):
         colors = [(123, 179, 240), (74, 144, 226), (231, 76, 60)]
         labels = ["T+", "TP", "T-"]
         
+        # === Treatment Status Indicator (above pie chart, minimal margin) ===
+        treatment_status = "Treatment: Unknown"
+        if hasattr(self, 'last_action'):
+            treatment_status = f"Treatment: {'ON' if self.last_action == 1 else 'OFF'}"
+        
+        status_color = (0, 150, 0) if hasattr(self, 'last_action') and self.last_action == 1 else (150, 0, 0)
+        status_text = self.font.render(treatment_status, True, status_color)
+        status_rect = status_text.get_rect(center=(pie_center_x, pie_center_y - pie_radius - 15))
+        surf.blit(status_text, status_rect)
+
         # Draw pie chart
         start_angle = -90  # Start from top (12 o'clock position)
         for i, (ratio, color, label) in enumerate(zip(ratios, colors, labels)):
@@ -248,45 +258,31 @@ class ProstateCancerTherapyEnv(gym.Env):
         # Draw pie chart border
         gfxdraw.aacircle(surf, pie_center_x, pie_center_y, pie_radius, (0, 0, 0))
         
-        # Legend positioned below the pie chart for better space utilization
-        legend_start_x = pie_center_x - 120  # Center the legend under the pie
-        legend_start_y = pie_center_y + pie_radius + 40
+        # Legend positioned below pie chart, with more breathing room
+        legend_start_x = pie_center_x - 60  # Tight centering
+        legend_start_y = pie_center_y + pie_radius + 15
         
         for i, (color, label) in enumerate(zip(colors, labels)):
-            legend_x = legend_start_x + i * 80  # Horizontal layout
+            legend_x = legend_start_x + i * 40  # Very close spacing
             
-            # Color box
-            pygame.draw.rect(surf, color, (legend_x, legend_start_y, 15, 15))
-            pygame.draw.rect(surf, (0, 0, 0), (legend_x, legend_start_y, 15, 15), 1)
+            # Smaller color box
+            pygame.draw.rect(surf, color, (legend_x, legend_start_y, 12, 12))
+            pygame.draw.rect(surf, (0, 0, 0), (legend_x, legend_start_y, 12, 12), 1)
             
-            # Shortened label names to fit horizontally
+            # Shortened label names
             label_names = ["T+", "TP", "T-"]
             label_text = self.small_font.render(label_names[i], True, (0, 0, 0))
-            surf.blit(label_text, (legend_x + 20, legend_start_y - 2))
+            surf.blit(label_text, (legend_x + 15, legend_start_y - 2))
             
-            # Cell count for this type
+            # Cell count for this type (smaller font)
             count_text = self.small_font.render(f"{self.counts[i]:.0f}", True, (100, 100, 100))
-            surf.blit(count_text, (legend_x + 20, legend_start_y + 10))
+            surf.blit(count_text, (legend_x + 15, legend_start_y + 12))
 
-        # Total cell count below legend
+        # Total cell count below legend, with more space
         count_y = legend_start_y + 35
-        count_text = self.font.render(f"Total Population: {self.population_size:.0f} cells", True, (0, 0, 0))
+        count_text = self.small_font.render(f"Total: {self.population_size:.0f}", True, (0, 0, 0))
         count_rect = count_text.get_rect(center=(pie_center_x, count_y))
         surf.blit(count_text, count_rect)
-
-        # === Title ===
-        title_text = self.font.render("Prostate Cancer Therapy Environment", True, (0, 0, 0))
-        title_rect = title_text.get_rect(center=(screen_width // 2, 30))
-        surf.blit(title_text, title_rect)
-
-        # === Treatment Status Indicator (moved to left side, below Pie Chart) ===
-        treatment_status = "Treatment: Unknown"
-        if hasattr(self, 'last_action'):
-            treatment_status = f"Treatment: {'ON' if self.last_action == 1 else 'OFF'}"
-        
-        status_color = (0, 150, 0) if hasattr(self, 'last_action') and self.last_action == 1 else (150, 0, 0)
-        status_text = self.font.render(treatment_status, True, status_color)
-        surf.blit(status_text, (pie_center_x - 50, pie_center_y + pie_radius + 5))  # Below Pie
 
         # Blit everything to the main screen
         self.screen.blit(surf, (0, 0))

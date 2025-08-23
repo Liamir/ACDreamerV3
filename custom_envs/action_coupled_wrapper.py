@@ -593,7 +593,7 @@ class ActionCoupledWrapper(Wrapper):
                     else:  # Create a default black frame
                         frame = np.zeros((self.single_env_height, self.single_env_width, 3), dtype=np.uint8)
                 
-                # Add environment index as text overlay for terminated environments
+                # Add overlay for terminated environments (without numbering)
                 if self.terminated_envs[i]:
                     frame = self._add_terminated_overlay(frame, i)
                 
@@ -615,10 +615,13 @@ class ActionCoupledWrapper(Wrapper):
         # Create grid layout
         grid_image = self._create_grid_layout(frames)
         
+        # Add title and progress bar to the final grid image
+        final_image = self._add_title_and_progress_bar(grid_image)
+        
         if self.render_mode == "human":
-            return self._render_human(grid_image)
+            return self._render_human(final_image)
         else:  # rgb_array
-            return grid_image
+            return final_image
     
     def _create_grid_layout(self, frames):
         """Create a grid layout from individual environment frames."""
@@ -647,9 +650,6 @@ class ActionCoupledWrapper(Wrapper):
             x_end = x_start + w
             
             grid[y_start:y_end, x_start:x_end, :] = frame
-            
-            # Add environment number overlay
-            grid = self._add_env_number_overlay(grid, idx, x_start, y_start, w, h)
         
         return grid
     
@@ -660,38 +660,98 @@ class ActionCoupledWrapper(Wrapper):
         overlay[:, :, 0] = np.minimum(overlay[:, :, 0] + 50, 255)
         return overlay
     
-    def _add_env_number_overlay(self, grid, env_idx, x_start, y_start, w, h):
-        """Add environment number text overlay to each frame."""
-        # This is a simple pixel-based number overlay
-        # You could use PIL or OpenCV for better text rendering
+    def _add_title_and_progress_bar(self, grid_image):
+        """Add title and progress bar to the top of the grid image."""
+        if grid_image is None:
+            return None
         
-        # Create a simple number display in the top-left corner
-        text_region_size = 20
-        if env_idx < 10:  # Single digit
-            # Simple pixel pattern for numbers 0-9
-            number_patterns = {
-                0: [[1,1,1],[1,0,1],[1,0,1],[1,0,1],[1,1,1]],
-                1: [[0,1,0],[1,1,0],[0,1,0],[0,1,0],[1,1,1]],
-                2: [[1,1,1],[0,0,1],[1,1,1],[1,0,0],[1,1,1]],
-                3: [[1,1,1],[0,0,1],[1,1,1],[0,0,1],[1,1,1]],
-                4: [[1,0,1],[1,0,1],[1,1,1],[0,0,1],[0,0,1]],
-                5: [[1,1,1],[1,0,0],[1,1,1],[0,0,1],[1,1,1]],
-                6: [[1,1,1],[1,0,0],[1,1,1],[1,0,1],[1,1,1]],
-                7: [[1,1,1],[0,0,1],[0,0,1],[0,0,1],[0,0,1]],
-                8: [[1,1,1],[1,0,1],[1,1,1],[1,0,1],[1,1,1]],
-                9: [[1,1,1],[1,0,1],[1,1,1],[0,0,1],[1,1,1]]
-            }
+        try:
+            import pygame
             
-            if env_idx in number_patterns:
-                pattern = number_patterns[env_idx]
-                for i, row in enumerate(pattern):
-                    for j, pixel in enumerate(row):
-                        if pixel and (y_start + 2 + i*2) < grid.shape[0] and (x_start + 2 + j*2) < grid.shape[1]:
-                            # Draw white pixel for number
-                            grid[y_start + 2 + i*2:y_start + 4 + i*2, 
-                                 x_start + 2 + j*2:x_start + 4 + j*2, :] = [255, 255, 255]
-        
-        return grid
+            # Constants for the header
+            header_height = 80
+            progress_bar_height = 20
+            progress_bar_margin = 10
+            title_height = 30
+            
+            # Create new image with header space
+            grid_height, grid_width, channels = grid_image.shape
+            total_height = grid_height + header_height
+            final_image = np.zeros((total_height, grid_width, channels), dtype=grid_image.dtype)
+            
+            # Fill header with white background
+            final_image[:header_height, :, :] = 255
+            
+            # Copy grid image below the header
+            final_image[header_height:, :, :] = grid_image
+            
+            # Create a temporary pygame surface for text rendering
+            temp_surface = pygame.Surface((grid_width, header_height))
+            temp_surface.fill((255, 255, 255))  # White background
+            
+            # Initialize font if needed
+            pygame.font.init()
+            font = pygame.font.Font(None, 36)
+            
+            # Draw title
+            title_text = font.render("Prostate Cancer Therapy Environment", True, (0, 0, 0))
+            title_rect = title_text.get_rect(center=(grid_width // 2, title_height // 2))
+            temp_surface.blit(title_text, title_rect)
+            
+            # Draw progress bar
+            progress_bar_width = grid_width - 2 * progress_bar_margin
+            progress_bar_x = progress_bar_margin
+            progress_bar_y = title_height + 10
+            
+            # Background of progress bar (light gray)
+            pygame.draw.rect(temp_surface, (200, 200, 200), 
+                           (progress_bar_x, progress_bar_y, progress_bar_width, progress_bar_height))
+            
+            # Progress fill (green to red gradient based on progress)
+            if hasattr(self, 'pop_norm'):
+                progress = min(self.pop_norm / 1.2, 1.0)  # Normalize to 0-1 range
+                fill_width = int(progress_bar_width * progress)
+                
+                # Color transition from green to red as progress increases
+                if progress < 0.5:
+                    # Green to yellow
+                    red = int(255 * (progress * 2))
+                    green = 255
+                    blue = 0
+                else:
+                    # Yellow to red
+                    red = 255
+                    green = int(255 * (2 - progress * 2))
+                    blue = 0
+                
+                if fill_width > 0:
+                    pygame.draw.rect(temp_surface, (red, green, blue),
+                                   (progress_bar_x, progress_bar_y, fill_width, progress_bar_height))
+            
+            # Progress bar border
+            pygame.draw.rect(temp_surface, (0, 0, 0),
+                           (progress_bar_x, progress_bar_y, progress_bar_width, progress_bar_height), 2)
+            
+            # Add progress text
+            if hasattr(self, 'pop_norm'):
+                progress_text = f"Population Norm: {self.pop_norm:.2f} / 1.20"
+                progress_font = pygame.font.Font(None, 24)
+                progress_surface = progress_font.render(progress_text, True, (0, 0, 0))
+                progress_rect = progress_surface.get_rect(center=(grid_width // 2, progress_bar_y + progress_bar_height + 15))
+                temp_surface.blit(progress_surface, progress_rect)
+            
+            # Convert pygame surface to numpy array and update final image
+            header_array = pygame.surfarray.array3d(temp_surface).swapaxes(0, 1)
+            final_image[:header_height, :, :] = header_array
+            
+            return final_image
+            
+        except ImportError:
+            logging.error("pygame not available for rendering title and progress bar")
+            return grid_image
+        except Exception as e:
+            logging.error(f"Error adding title and progress bar: {e}")
+            return grid_image
     
     def _render_human(self, grid_image):
         """Render the grid image to the pygame display."""

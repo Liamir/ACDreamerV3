@@ -88,7 +88,7 @@ training:
 # Testing/evaluation settings
 evaluation:
   eval_type: "visual"  # visual / numeric
-  test_only_fixed_policy: false
+  test_only_fixed_policy: true
   fixed_policy_type: "MTD"  # MTD / Adaptive / Optimal
   episodes: 1
   model_type: "best"
