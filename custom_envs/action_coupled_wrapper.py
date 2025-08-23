@@ -35,6 +35,7 @@ class ActionCoupledWrapper(Wrapper):
         """
         
         self.k = k
+        self.original_k = k
         self._render_mode = render_mode
         self._metadata = None
         self.cfg = cfg
@@ -424,12 +425,11 @@ class ActionCoupledWrapper(Wrapper):
 
         elif self.cfg.agent_type == 'bulk':
             total_population = total_counts.sum()
-            scaled_population = total_population / 4000.0 - 1
             ratios = total_counts / total_population
             pop_norm = total_population / self.total_initial_population
             final_observation = np.concatenate([
                 ratios, 
-                np.array([scaled_population]), 
+                np.array([total_population]), 
                 np.array([pop_norm])
             ])
         # Ensure the stacked observation matches our observation space
@@ -489,45 +489,32 @@ class ActionCoupledWrapper(Wrapper):
         obs, rewards, dones, truncs, infos = [], [], [], [], []
         total_counts = np.zeros(shape=(3), dtype=np.float64)
         
-        # Use the same action for all active environments
+        # Partition (one env splits into two envs)
+        new_envs = []
+        # for env in self.envs:
+
+
+
+        # Growth (get next counts from the ODE, using the same action for all envs)
         for i, env in enumerate(self.envs):
-            if not self.terminated_envs[i]:
-                # Only step environments that haven't terminated yet
-                with self._seed_context(i):  # Use seed context to maintain determinism
-                    result = env.step(action)
-                    
-                    # Handle different return formats (gym vs gymnasium)
-                    if len(result) == 4:
-                        # Old gym format: (obs, reward, done, info)
-                        o, r, d, i_info = result
-                        t = False  # No truncation in old format
-                    else:
-                        # New gymnasium format: (obs, reward, terminated, truncated, info)
-                        o, r, d, t, i_info = result
+            with self._seed_context(i):  # Use seed context to maintain determinism
+                result = env.step(action)
                 
-                flattened_obs = self._flatten_observation(o)
-                obs.append(flattened_obs)
-                rewards.append(r)
-                dones.append(d)
-                truncs.append(t)
-                infos.append(i_info)
-                
-                # Update terminated state for this environment
-                if d or t:
-                    self.terminated_envs[i] = True
-            else:
-                # For terminated environments, create zero observation
-                if not hasattr(self, '_zero_obs_size'):
-                    # Calculate zero observation size from observation space
-                    single_env_obs_size = self.observation_space.shape[0] // self.k
-                    self._zero_obs_size = single_env_obs_size
-                    self._zero_obs = np.zeros(single_env_obs_size, dtype=np.float64)
-                
-                obs.append(self._zero_obs)
-                rewards.append(0)
-                dones.append(True)
-                truncs.append(True)
-                infos.append({})
+                # Handle different return formats (gym vs gymnasium)
+                if len(result) == 4:
+                    # Old gym format: (obs, reward, done, info)
+                    o, r, d, i_info = result
+                    t = False  # No truncation in old format
+                else:
+                    # New gymnasium format: (obs, reward, terminated, truncated, info)
+                    o, r, d, t, i_info = result
+            
+            flattened_obs = self._flatten_observation(o)
+            obs.append(flattened_obs)
+            rewards.append(r)
+            dones.append(d)
+            truncs.append(t)
+            infos.append(i_info)
 
             total_counts += env.unwrapped.counts
 
@@ -540,17 +527,6 @@ class ActionCoupledWrapper(Wrapper):
     
         # print(f'{pop_norm = }')
 
-        # done_flags = [d or t for d, t in zip(dones, truncs)]
-        # Log number of active environments
-        active_envs = sum(1 for d in self.terminated_envs if not d)
-        if active_envs < self.k:  # Only log when some environments are done
-            logging.info(f"Active environments: {active_envs}")
-
-        # End episode if at least half of the envs have finished
-        # done = sum(done_flags) >= self.k - self.k // 2
-        # number of live envs
-        # negative sum of angles in absolute value
-
         if self.reward_type == 'min':
             reward = np.min(rewards)
         elif self.reward_type == 'avg':
@@ -560,26 +536,15 @@ class ActionCoupledWrapper(Wrapper):
         else:
             print(f'Warning: reward type: {self.reward_type} not supported.')
 
-        # if self.termination_type == 'first':
-        #     done = any(done_flags)
-        # elif self.termination_type == 'half':
-        #     done = sum(done_flags) >= self.k - self.k // 2
-        # elif self.termination_type == 'all':
-        #     done = all(done_flags)
-        # else:
-        #     print(f'Warning: termination type: {self.termination_type} not supported.')
-
-        scaled_pop_norm = pop_norm - 0.6
         if self.cfg.agent_type == 'spatial':
             stacked_obs = np.concatenate(obs)
-            final_observation = np.concatenate([stacked_obs, np.array([scaled_pop_norm], dtype=np.float64)])
+            final_observation = np.concatenate([stacked_obs, np.array([pop_norm], dtype=np.float64)])
         elif self.cfg.agent_type == 'bulk':
-            scaled_population = total_population / 4000.0 - 1
             ratios = total_counts / total_population
             final_observation = np.concatenate([
                 ratios, 
-                np.array([scaled_population]), 
-                np.array([scaled_pop_norm])
+                np.array([total_population]), 
+                np.array([pop_norm])
             ])
 
         return final_observation, reward, done, False, {"individual_rewards": rewards, "infos": infos}

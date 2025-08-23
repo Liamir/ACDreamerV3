@@ -5,7 +5,7 @@ experiment:
     # "CartPole-v1"
     # "Pendulum-v1"
   env_import: "CellGroup-v0"
-  name: "fixed_init_spatial_3MDK_lr_tune"
+  name: "new_norm_3M_try5"
   description: "PPO Experiment"
   save_path: "./runs"
   num_envs: 9
@@ -32,8 +32,8 @@ environment:
   # terminating when total population reaches x1.2 from starting population
 
 normalization:
-  enabled: false
-  norm_obs: false
+  enabled: true
+  norm_obs: true
   norm_reward: false
 
 algorithm:
@@ -64,16 +64,16 @@ algorithm:
 
   tuning:
     enabled: true
-    num_trials: 10
+    num_trials: 5
     search_space:
-      learning_rate: ['log', 1.0e-5, 5.0e-3]
+      learning_rate: ['log', 8.0e-6, 5.0e-4]
       # gamma: ['log', 0.99, 0.999]
       # gae_lambda: ['linear', 0.90, 0.99]
       # clip_range: ['linear', 0.05, 0.25]
       # ent_coef: ['linear', 0.03, 0.055]
 
 training:
-  timesteps: 3500000   # used for train and resume
+  timesteps: 3000000   # used for train and resume
   
   # Evaluation during training
   eval_freq: 25000
@@ -86,9 +86,9 @@ training:
 
 # Testing/evaluation settings
 evaluation:
-  eval_type: "numeric"  # visual / numeric
-  test_only_fixed_policy: false
-  fixed_policy_type: "Optimal"  # MTD / Adaptive / Optimal
+  eval_type: "visual"  # visual / numeric
+  test_only_fixed_policy: true
+  fixed_policy_type: "MTD"  # MTD / Adaptive / Optimal
   episodes: 1
   model_type: "best"
   model_path: null

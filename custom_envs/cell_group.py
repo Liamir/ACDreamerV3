@@ -19,26 +19,22 @@ class ProstateCancerTherapyEnv(gym.Env):
         self.render_mode = render_mode
         self.dt = dt
         self.k = k
-        self.population_scale = 4000.0 / k
         self.params = copy.deepcopy(LV_params)
         self.tp_cap_on_treatment = self.params['tp_cap_on_treatment']
         self.tp_capacity_off_treatment = self.params['carrying_capacities'][1]
         self.growth_rates = self.params['growth_rates']
         self.competition_matrix = self.params['competition_matrix']
         
-        # T+ ratio, TP ratio, T- ratio
-        self.ratios_low = np.array([0, 0, 0], dtype=np.float64)
-        self.ratios_high = np.array([1, 1, 1], dtype=np.float64)
-        self.population_low = np.array([-1], dtype=np.float64)
+        # T+ counts, TP counts, T- counts
+        self.counts_low = np.array([0, 0, 0], dtype=np.float64)
+        self.counts_high = np.array([np.inf, np.inf, np.inf], dtype=np.float64)
+        self.population_low = np.array([0], dtype=np.float64)
         self.population_high = np.array([np.inf], dtype=np.float64)
-        # self.population_ratio_low = np.array([-1], dtype=np.float64)
-        # self.population_ratio_high = np.array([1], dtype=np.float64)
 
         self.observation_space = gym.spaces.Dict(
             {
-                "ratios": gym.spaces.Box(self.ratios_low, self.ratios_high, dtype=np.float64),
+                "counts": gym.spaces.Box(self.counts_low, self.counts_high, dtype=np.float64),
                 "population": gym.spaces.Box(self.population_low, self.population_high, dtype=np.float64),
-                # "population_ratio": gym.spaces.Box(self.population_low, self.population_high, dtype=np.float64),
             }
         )
 
@@ -47,9 +43,8 @@ class ProstateCancerTherapyEnv(gym.Env):
     
     def _get_obs(self):
         return {
-            "ratios": self.counts / self.population_size,
-            "population": np.array([self.population_size]) / self.population_scale - 1,
-            # "population_ratio": np.array([self.population_size]) / self.original_population - 0.6,
+            "counts": self.counts,
+            "population": np.array([self.population_size]),
         }
 
     def _get_counts(self):
@@ -57,7 +52,6 @@ class ProstateCancerTherapyEnv(gym.Env):
         Returns: Cell type counts
         """
         return self.counts
-        # return self.population_size * self._get_obs()["ratios"]
 
 
     def _get_info(self):
@@ -119,7 +113,6 @@ class ProstateCancerTherapyEnv(gym.Env):
             self.counts = self.params['init_counts']
 
         self.original_population = self.population_size
-        self.pop_norm = np.float64(1.0)
 
         self.carrying_capacities = self.params['carrying_capacities']
         self.carrying_capacities[0] = 1.5 * self.counts[1]
@@ -152,14 +145,8 @@ class ProstateCancerTherapyEnv(gym.Env):
         self.counts = np.where(self.counts < 1.0e-9, 1.0e-9, self.counts)
         self.population_size = self.counts.sum()
 
-        self.pop_norm = self.population_size / self.original_population
-
         truncated = False
         terminated = False
-
-        # termination controlled by the action coupled model
-        # if self.pop_norm >= 1.2:
-        #     terminated = True
 
         reward = 0.0
 
@@ -216,51 +203,51 @@ class ProstateCancerTherapyEnv(gym.Env):
             self.font = pygame.font.Font(None, 24)
             self.small_font = pygame.font.Font(None, 18)
 
-        # === Vertical PSA Level Bar (Left side) ===
-        bar_x = 60
-        bar_y = 80
-        bar_width = 40
-        bar_height = 250
+        # # === Vertical PSA Level Bar (Left side) ===
+        # bar_x = 60
+        # bar_y = 80
+        # bar_width = 40
+        # bar_height = 250
         
-        # Background bar (vertical)
-        pygame.draw.rect(surf, (200, 200, 200), (bar_x, bar_y, bar_width, bar_height))
-        pygame.draw.rect(surf, (0, 0, 0), (bar_x, bar_y, bar_width, bar_height), 2)
+        # # Background bar (vertical)
+        # pygame.draw.rect(surf, (200, 200, 200), (bar_x, bar_y, bar_width, bar_height))
+        # pygame.draw.rect(surf, (0, 0, 0), (bar_x, bar_y, bar_width, bar_height), 2)
         
-        # PSA level bar (fill from bottom, based on normalized PSA)
-        psa_ratio = min(self.pop_norm, 2.0) / 2.0  # Cap at 2x original, normalize to 0-1
-        psa_fill_height = int(bar_height * psa_ratio)
+        # # population level bar (fill from bottom, based on normalized PSA)
+        # psa_ratio = min(self.population_size, 2.0) / 2.0  # Cap at 2x original, normalize to 0-1
+        # psa_fill_height = int(bar_height * psa_ratio)
         
-        # Color based on PSA level
-        if self.pop_norm <= 0.8:
-            bar_color = (50, 205, 50)  # Green
-        elif self.pop_norm <= 1.0:
-            bar_color = (255, 165, 0)  # Orange
-        else:
-            bar_color = (220, 20, 60)  # Red
+        # # Color based on PSA level
+        # if self.pop_norm <= 0.8:
+        #     bar_color = (50, 205, 50)  # Green
+        # elif self.pop_norm <= 1.0:
+        #     bar_color = (255, 165, 0)  # Orange
+        # else:
+        #     bar_color = (220, 20, 60)  # Red
         
-        # Draw filled portion from bottom up
-        if psa_fill_height > 0:
-            fill_y = bar_y + bar_height - psa_fill_height
-            pygame.draw.rect(surf, bar_color, (bar_x, fill_y, bar_width, psa_fill_height))
+        # # Draw filled portion from bottom up
+        # if psa_fill_height > 0:
+        #     fill_y = bar_y + bar_height - psa_fill_height
+        #     pygame.draw.rect(surf, bar_color, (bar_x, fill_y, bar_width, psa_fill_height))
         
-        # PSA text labels (positioned around the vertical bar)
-        psa_text = self.font.render(f"Population: {self.pop_norm:.3f}", True, (0, 0, 0))
-        surf.blit(psa_text, (bar_x - 10, bar_y - 30))
+        # # PSA text labels (positioned around the vertical bar)
+        # psa_text = self.font.render(f"Population: {self.pop_norm:.3f}", True, (0, 0, 0))
+        # surf.blit(psa_text, (bar_x - 10, bar_y - 30))
         
-        # Scale labels on the right side of the bar
-        scale_labels = [
-            (bar_y + bar_height, "0.0"),
-            (bar_y + bar_height//2, "1.0"),
-            (bar_y, "2.0")
-        ]
+        # # Scale labels on the right side of the bar
+        # scale_labels = [
+        #     (bar_y + bar_height, "0.0"),
+        #     (bar_y + bar_height//2, "1.0"),
+        #     (bar_y, "2.0")
+        # ]
         
-        for label_y, label_text in scale_labels:
-            scale_text = self.small_font.render(label_text, True, (100, 100, 100))
-            surf.blit(scale_text, (bar_x + bar_width + 10, label_y - 8))
+        # for label_y, label_text in scale_labels:
+        #     scale_text = self.small_font.render(label_text, True, (100, 100, 100))
+        #     surf.blit(scale_text, (bar_x + bar_width + 10, label_y - 8))
         
-        # Original PSA value at bottom
-        original_text = self.small_font.render(f"Original: {self.original_population:.1f}", True, (100, 100, 100))
-        surf.blit(original_text, (bar_x - 10, bar_y + bar_height + 10))
+        # # Original PSA value at bottom
+        # original_text = self.small_font.render(f"Original: {self.original_population:.1f}", True, (100, 100, 100))
+        # surf.blit(original_text, (bar_x - 10, bar_y + bar_height + 10))
 
         # === Cell Distribution Pie Chart (Center-right) ===
         pie_center_x = 400  # Fixed center position to ensure it fits
@@ -338,14 +325,14 @@ class ProstateCancerTherapyEnv(gym.Env):
         title_rect = title_text.get_rect(center=(screen_width // 2, 30))
         surf.blit(title_text, title_rect)
 
-        # === Treatment Status Indicator (moved to left side, below PSA bar) ===
+        # === Treatment Status Indicator (moved to left side, below Pie Chart) ===
         treatment_status = "Treatment: Unknown"
         if hasattr(self, 'last_action'):
             treatment_status = f"Treatment: {'ON' if self.last_action == 1 else 'OFF'}"
         
         status_color = (0, 150, 0) if hasattr(self, 'last_action') and self.last_action == 1 else (150, 0, 0)
         status_text = self.font.render(treatment_status, True, status_color)
-        surf.blit(status_text, (bar_x - 10, bar_y + bar_height + 35))  # Below PSA bar
+        surf.blit(status_text, (pie_center_x - 50, pie_center_y + pie_radius + 5))  # Below Pie
 
         # Blit everything to the main screen
         self.screen.blit(surf, (0, 0))

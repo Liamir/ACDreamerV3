@@ -47,11 +47,9 @@ class BaseTrainer(ABC):
                 print(f"  Low: {options['low']}")
                 print(f"  High: {options['high']}")
         
-        print('before init_state')
         if hasattr(self.cfg.environment, 'init_state'):
             init_state = self.cfg.environment.init_state
             options['init_state'] = dict(init_state) if hasattr(init_state, '_asdict') else init_state
-        print('after init_state')
         
         if hasattr(self.cfg.environment, 'reward_type'):
             reward_type = getattr(self.cfg.environment, 'reward_type')
@@ -338,13 +336,13 @@ class BaseTrainer(ABC):
                     if fixed_policy == 'MTD':
                         action = 1
                     if fixed_policy == 'Adaptive':
-                        pop_norm = obs[-1] + 0.6
+                        pop_norm = obs[-1]
                         if pop_norm <= 0.5:
                             action = 0
                         elif pop_norm >= 1.0:
                             action = 1
                     if fixed_policy == 'Optimal':
-                        pop_norm = obs[-1] + 0.6
+                        pop_norm = obs[-1]
                         if pop_norm < 1.16:
                             action = 0
                         elif pop_norm >= 1.16:
