@@ -3,10 +3,9 @@ import numpy as np
 from stable_baselines3.common.running_mean_std import RunningMeanStd
 
 class NormalizationWrapper(gym.Wrapper):
-    def __init__(self, env, norm_obs=True, norm_reward=True, clip_reward=10.0):
+    def __init__(self, env, norm_obs=True, norm_reward=True, clip_reward=10.0, cfg=None):
         super().__init__(env)
-        self.k = env.original_k
-
+        self.effective_k = env.original_k if cfg.agent_type == 'spatial' else 1
         self.norm_obs = norm_obs
         self.norm_reward = norm_reward
         self.clip_reward = clip_reward
@@ -26,8 +25,8 @@ class NormalizationWrapper(gym.Wrapper):
         
         original_population = self.env.total_initial_population
         # obs size (np array): 4K + 1: 4 * (c11, c12, c13, p) + total_p
-        for i in range(0, 4 * self.k, 4):
-            # log normalization for cell ratio observations (large range)
+        for i in range(0, 4 * self.effective_k, 4):
+            # log normalization for cell counts observation (large range)
             # c's should be in the range (1e-9, 1e3)
             obs[i : i+3] = ((np.log10(obs[i : i+3]) - (-9.0)) / (3.0 - (-9.0))) * 2 - 1
 

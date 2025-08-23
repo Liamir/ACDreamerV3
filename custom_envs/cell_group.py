@@ -26,10 +26,10 @@ class ProstateCancerTherapyEnv(gym.Env):
         self.competition_matrix = self.params['competition_matrix']
         
         # T+ counts, TP counts, T- counts
-        self.counts_low = np.array([0, 0, 0], dtype=np.float64)
-        self.counts_high = np.array([np.inf, np.inf, np.inf], dtype=np.float64)
-        self.population_low = np.array([0], dtype=np.float64)
-        self.population_high = np.array([np.inf], dtype=np.float64)
+        self.counts_low = np.array([0.0, 0.0, 0.0], dtype=np.float64)
+        self.counts_high = np.array([10000.0, 10000.0, 10000.0], dtype=np.float64)
+        self.population_low = np.array([0.0], dtype=np.float64)
+        self.population_high = np.array([10000.0], dtype=np.float64)
 
         self.observation_space = gym.spaces.Dict(
             {
@@ -202,52 +202,6 @@ class ProstateCancerTherapyEnv(gym.Env):
         if not hasattr(self, 'font') or self.font is None:
             self.font = pygame.font.Font(None, 24)
             self.small_font = pygame.font.Font(None, 18)
-
-        # # === Vertical PSA Level Bar (Left side) ===
-        # bar_x = 60
-        # bar_y = 80
-        # bar_width = 40
-        # bar_height = 250
-        
-        # # Background bar (vertical)
-        # pygame.draw.rect(surf, (200, 200, 200), (bar_x, bar_y, bar_width, bar_height))
-        # pygame.draw.rect(surf, (0, 0, 0), (bar_x, bar_y, bar_width, bar_height), 2)
-        
-        # # population level bar (fill from bottom, based on normalized PSA)
-        # psa_ratio = min(self.population_size, 2.0) / 2.0  # Cap at 2x original, normalize to 0-1
-        # psa_fill_height = int(bar_height * psa_ratio)
-        
-        # # Color based on PSA level
-        # if self.pop_norm <= 0.8:
-        #     bar_color = (50, 205, 50)  # Green
-        # elif self.pop_norm <= 1.0:
-        #     bar_color = (255, 165, 0)  # Orange
-        # else:
-        #     bar_color = (220, 20, 60)  # Red
-        
-        # # Draw filled portion from bottom up
-        # if psa_fill_height > 0:
-        #     fill_y = bar_y + bar_height - psa_fill_height
-        #     pygame.draw.rect(surf, bar_color, (bar_x, fill_y, bar_width, psa_fill_height))
-        
-        # # PSA text labels (positioned around the vertical bar)
-        # psa_text = self.font.render(f"Population: {self.pop_norm:.3f}", True, (0, 0, 0))
-        # surf.blit(psa_text, (bar_x - 10, bar_y - 30))
-        
-        # # Scale labels on the right side of the bar
-        # scale_labels = [
-        #     (bar_y + bar_height, "0.0"),
-        #     (bar_y + bar_height//2, "1.0"),
-        #     (bar_y, "2.0")
-        # ]
-        
-        # for label_y, label_text in scale_labels:
-        #     scale_text = self.small_font.render(label_text, True, (100, 100, 100))
-        #     surf.blit(scale_text, (bar_x + bar_width + 10, label_y - 8))
-        
-        # # Original PSA value at bottom
-        # original_text = self.small_font.render(f"Original: {self.original_population:.1f}", True, (100, 100, 100))
-        # surf.blit(original_text, (bar_x - 10, bar_y + bar_height + 10))
 
         # === Cell Distribution Pie Chart (Center-right) ===
         pie_center_x = 400  # Fixed center position to ensure it fits

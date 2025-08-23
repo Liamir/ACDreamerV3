@@ -298,7 +298,8 @@ class BaseTrainer(ABC):
             env = NormalizationWrapper(
                 env, 
                 norm_obs=getattr(self.cfg.normalization, 'norm_obs', True),
-                norm_reward=getattr(self.cfg.normalization, 'norm_reward', True)
+                norm_reward=getattr(self.cfg.normalization, 'norm_reward', True),
+                cfg=self.cfg.environment,
             )
         
         if for_evaluation:

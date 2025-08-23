@@ -100,7 +100,7 @@ class ActionCoupledWrapper(Wrapper):
             # Add 1 dimension for pop_norm global metric
             self.observation_space = gym.spaces.Box(
                 low=np.concatenate([stacked_space.low, np.array([0.0])]),  # pop_norm minimum is 0
-                high=np.concatenate([stacked_space.high, np.array([np.inf])]),  # pop_norm can grow
+                high=np.concatenate([stacked_space.high, np.array([1.5])]),  # pop_norm can grow
                 dtype=np.float64
             )
         elif self.cfg.agent_type == 'bulk':
@@ -420,21 +420,21 @@ class ActionCoupledWrapper(Wrapper):
             total_counts += env.unwrapped.counts
             flattened_obs = self._flatten_observation(obs)
             observations.append(flattened_obs)
+
+        total_population = total_counts.sum()
+        self.pop_norm = total_population / self.total_initial_population
+        total_population = np.array([total_population])
                 
         # Stack all observations into a single vector
         stacked_obs = np.concatenate(observations)
         if self.cfg.agent_type == 'spatial':
-            initial_pop_norm = np.array([0.4], dtype=np.float64)
-            final_observation = np.concatenate([stacked_obs, initial_pop_norm])
+            final_observation = np.concatenate([stacked_obs, total_population])
 
         elif self.cfg.agent_type == 'bulk':
-            total_population = total_counts.sum()
-            ratios = total_counts / total_population
-            pop_norm = total_population / self.total_initial_population
             final_observation = np.concatenate([
-                ratios, 
-                np.array([total_population]), 
-                np.array([pop_norm])
+                total_counts, 
+                total_population, 
+                total_population
             ])
         # Ensure the stacked observation matches our observation space
         expected_size = self.observation_space.shape[0]
@@ -537,12 +537,12 @@ class ActionCoupledWrapper(Wrapper):
 
         # self.pop_norm = self.population_size / self.original_population
         total_population = total_counts.sum()
-        pop_norm = total_population / self.total_initial_population
+        self.pop_norm = total_population / self.total_initial_population
         done = False
-        if pop_norm >= 1.2:
+        if self.pop_norm >= 1.2:
             done = True
     
-        # print(f'{pop_norm = }')
+        # print(f'{self.pop_norm = }')
 
         if self.reward_type == 'min':
             reward = np.min(rewards)
@@ -555,13 +555,12 @@ class ActionCoupledWrapper(Wrapper):
 
         if self.cfg.agent_type == 'spatial':
             stacked_obs = np.concatenate(obs)
-            final_observation = np.concatenate([stacked_obs, np.array([pop_norm], dtype=np.float64)])
+            final_observation = np.concatenate([stacked_obs, np.array([total_population], dtype=np.float64)])
         elif self.cfg.agent_type == 'bulk':
-            ratios = total_counts / total_population
             final_observation = np.concatenate([
-                ratios, 
+                total_counts, 
                 np.array([total_population]), 
-                np.array([pop_norm])
+                np.array([total_population])
             ])
 
         return final_observation, reward, done, False, {"individual_rewards": rewards, "infos": infos}
