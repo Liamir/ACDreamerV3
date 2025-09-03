@@ -39,6 +39,7 @@ class ActionCoupledWrapper(Wrapper):
         self._render_mode = render_mode
         self._metadata = None
         self.cfg = cfg
+        self.env_fn = env_fn
 
         # Handle seed initialization
         self.master_seed = seed
@@ -99,14 +100,14 @@ class ActionCoupledWrapper(Wrapper):
             
             # Add 1 dimension for pop_norm global metric
             self.observation_space = gym.spaces.Box(
-                low=np.concatenate([stacked_space.low, np.array([0.0])]),  # pop_norm minimum is 0
-                high=np.concatenate([stacked_space.high, np.array([1.5])]),  # pop_norm can grow
+                low=np.concatenate([stacked_space.low, np.array([0.0])]),
+                high=np.concatenate([stacked_space.high, np.array([np.inf])]),
                 dtype=np.float64
             )
         elif self.cfg.agent_type == 'bulk':
             self.observation_space = gym.spaces.Box(
-                low=np.array([0, 0, 0, -1, 0]),
-                high=np.array([1, 1, 1, np.inf, np.inf]),
+                low=np.array([0.0, 0.0, 0.0, 0.0, 0.0]),
+                high=np.array([np.inf, np.inf, np.inf, np.inf, np.inf]),
                 dtype=np.float64
             )
 
@@ -492,12 +493,6 @@ class ActionCoupledWrapper(Wrapper):
     def step(self, action):
         obs, rewards, dones, truncs, infos = [], [], [], [], []
         total_counts = np.zeros(shape=(3), dtype=np.float64)
-        
-        # Partition (one env splits into two envs)
-        new_envs = []
-        # for env in self.envs:
-
-
 
         # Growth (get next counts from the ODE, using the same action for all envs)
         if self.cfg.stochastic_action:
@@ -534,6 +529,9 @@ class ActionCoupledWrapper(Wrapper):
             infos.append(i_info)
 
             total_counts += env.unwrapped.counts
+
+        # print('current k is', self.k)
+        # print('observation from all envs:', obs)
 
         # self.pop_norm = self.population_size / self.original_population
         total_population = total_counts.sum()
