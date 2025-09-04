@@ -27,7 +27,10 @@ def create_trainer(cfg):
     
     if algorithm == "ppo":
         if cfg.environment.agent_type == 'spatial':
-            return PPOTrainerTransformer(cfg)
+            if cfg.training.use_set_transformer:
+                return PPOTrainerTransformer(cfg)
+            else:
+                return PPOTrainer(cfg)
         elif cfg.environment.agent_type == 'bulk':
             return PPOTrainer(cfg)
     elif algorithm == "dqn":

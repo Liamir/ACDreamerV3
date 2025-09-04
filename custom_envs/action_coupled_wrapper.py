@@ -61,6 +61,12 @@ class ActionCoupledWrapper(Wrapper):
             self.seeds = None
 
         self.init_options = options or {}
+        if 'init_state' in self.init_options:
+            for _, counts in self.init_options['init_state'].items():
+                if len(counts) != self.k:
+                    print(f'Warning: specified num_envs does not match the initial state size ({self.k} != {len(counts)})')
+        else:
+            print('Warning: Initial State not specified (currently it is a must)')
 
         self.reward_type = options.get('reward_type', 'min')
         self.termination_type = options.get('termination_type', 'first')
@@ -97,20 +103,26 @@ class ActionCoupledWrapper(Wrapper):
 
         if self.cfg.agent_type == 'spatial':
             stacked_space = self._create_stacked_observation_space(single_obs_space, k)
-            
-            # Add 1 dimension for pop_norm global metric
-            self.observation_space = gym.spaces.Box(
-                low=np.concatenate([stacked_space.low, np.array([0.0])]),
-                high=np.concatenate([stacked_space.high, np.array([np.inf])]),
-                dtype=np.float64
-            )
-        elif self.cfg.agent_type == 'bulk':
-            self.observation_space = gym.spaces.Box(
-                low=np.array([0.0, 0.0, 0.0, 0.0, 0.0]),
-                high=np.array([np.inf, np.inf, np.inf, np.inf, np.inf]),
-                dtype=np.float64
-            )
+            if self.cfg.objective_type == 'TTP':
+                # Add 1 dimension for pop_norm global metric
+                self.observation_space = gym.spaces.Box(
+                    low=np.concatenate([stacked_space.low, np.array([0.0])]),
+                    high=np.concatenate([stacked_space.high, np.array([np.inf])]),
+                    dtype=np.float64
+                )
+            elif self.cfg.objective_type == 'TB':
+                self.observation_space = stacked_space
 
+        elif self.cfg.agent_type == 'bulk':
+            if self.cfg.objective_type == 'TTP':
+                self.observation_space = gym.spaces.Box(
+                    low=np.concatenate([single_obs_space.low, np.array([0.0])]),
+                    high=np.concatenate([single_obs_space.high, np.array([np.inf])]),
+                    dtype=single_obs_space.dtype
+                )
+            elif self.cfg.objective_type == 'TB':
+                self.observation_space = single_obs_space
+        
         self.terminated_envs = [False] * k  # Track terminated state for each environment
         
         # Rendering setup
@@ -399,19 +411,9 @@ class ActionCoupledWrapper(Wrapper):
                 env.seed(reset_seed)
             
             # Reset and get observation
-            try:
-                subenv_options = {cell_type: counts[i] for cell_type, counts in reset_options['init_state'].items()}
-                self.total_initial_population += np.sum(list(subenv_options.values()))
-                result = env.reset(seed=reset_seed, options=subenv_options)
-            except TypeError:
-                # Fallback for environments that don't support options
-                print(f'Failed to automatically set the initial state ranges. Trying to set them manually.')
-                result = env.reset(seed=reset_seed)
-                
-                # Apply manual initialization if ranges provided
-                if reset_options is not None:
-                    self._apply_manual_initialization(env, reset_options)
-                    result = self._get_observation_after_state_change(env)
+            subenv_options = {cell_type: counts[i] for cell_type, counts in reset_options['init_state'].items()}
+            self.total_initial_population += np.sum(list(subenv_options.values()))
+            result = env.reset(seed=reset_seed, options=subenv_options)
             
             # Handle different return formats
             if isinstance(result, tuple):
@@ -430,14 +432,17 @@ class ActionCoupledWrapper(Wrapper):
         # Stack all observations into a single vector
         stacked_obs = np.concatenate(observations)
         if self.cfg.agent_type == 'spatial':
-            final_observation = np.concatenate([stacked_obs, total_population])
+            if self.cfg.objective_type == 'TTP':
+                final_observation = np.concatenate([stacked_obs, total_population])
+            elif self.cfg.objective_type == 'TB':
+                final_observation = stacked_obs
 
         elif self.cfg.agent_type == 'bulk':
-            final_observation = np.concatenate([
-                total_counts, 
-                total_population, 
-                total_population
-            ])
+            if self.cfg.objective_type == 'TTP':
+                final_observation = np.concatenate([total_counts, total_population])
+            elif self.cfg.objective_type == 'TB':
+                final_observation = total_counts
+
         # Ensure the stacked observation matches our observation space
         expected_size = self.observation_space.shape[0]
         if len(final_observation) != expected_size:
@@ -559,14 +564,16 @@ class ActionCoupledWrapper(Wrapper):
 
         if self.cfg.agent_type == 'spatial':
             stacked_obs = np.concatenate(obs)
-            final_observation = np.concatenate([stacked_obs, np.array([total_population], dtype=np.float64)])
+            if self.cfg.objective_type == 'TTP':
+                final_observation = np.concatenate([stacked_obs, np.array([total_population], dtype=np.float64)])
+            elif self.cfg.objective_type == 'TB':
+                final_observation = stacked_obs
         elif self.cfg.agent_type == 'bulk':
-            final_observation = np.concatenate([
-                total_counts, 
-                np.array([total_population]), 
-                np.array([total_population])
-            ])
-
+            if self.cfg.objective_type == 'TTP':
+                final_observation = np.concatenate([total_counts, np.array([total_population])])
+            elif self.cfg.objective_type == 'TB':
+                final_observation = total_counts
+        
         return final_observation, reward, done, False, {"individual_rewards": rewards, "infos": infos}
     
     def render(self):

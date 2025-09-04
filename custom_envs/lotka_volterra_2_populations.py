@@ -27,25 +27,28 @@ class LV2PopulationsEnv(gym.Env):
         counts_low = np.array([0.0] * 2, dtype=np.float64)
         counts_high = np.array([self.carrying_capacity] * 2, dtype=np.float64)
 
-        if self.cfg.objective_type == 'TB':
-            self.observation_space = gym.spaces.Box(counts_low, counts_high, dtype=np.float64)
-        elif self.cfg.objective_type == 'TTP':
-            pop_norm_low = np.array([0.0], dtype=np.float64)
-            pop_norm_high = np.array([np.inf], dtype=np.float64)
-            self.observation_space = gym.spaces.Box(
-                np.concatenate([counts_low, pop_norm_low]),
-                np.concatenate([counts_high, pop_norm_high]),
-                dtype=np.float64
-            )
+        # if self.cfg.objective_type == 'TB':
+        #     self.observation_space = gym.spaces.Box(counts_low, counts_high, dtype=np.float64)
+        # elif self.cfg.objective_type == 'TTP':
+        #     pop_norm_low = np.array([0.0], dtype=np.float64)
+        #     pop_norm_high = np.array([np.inf], dtype=np.float64)
+        #     self.observation_space = gym.spaces.Box(
+        #         np.concatenate([counts_low, pop_norm_low]),
+        #         np.concatenate([counts_high, pop_norm_high]),
+        #         dtype=np.float64
+        #     )
+        self.observation_space = gym.spaces.Box(counts_low, counts_high, dtype=np.float64)
+        
 
         # 0 is off treatment, 1 is on treatment
         self.action_space = gym.spaces.Discrete(2)
     
     def _get_obs(self):
-        if self.cfg.objective_type == 'TB':
-            return self.counts
-        elif self.cfg.objective_type == 'TTP':
-            return np.concatenate([self.counts, np.array([self.population_size])])
+        # if self.cfg.objective_type == 'TB':
+        #     return self.counts
+        # elif self.cfg.objective_type == 'TTP':
+        #     return np.concatenate([self.counts, np.array([self.population_size])])
+        return self.counts
 
     def _get_counts(self):
         """
