@@ -4,18 +4,25 @@ experiment:
     # "CustomMountainCar-v0"
     # "CartPole-v1"
     # "Pendulum-v1"
-  env_import: "CellGroup-v0"
-  name: "fixed_new_norm_3M_try5"
+  env_import: "LV2Populations-v0"
+  name: "lv2pop_check"
   description: "PPO Experiment"
   save_path: "./runs"
-  num_envs: 9
+  num_envs: 2
 
 environment:
   agent_type: "spatial"  # spatial / bulk
+  objective_type: "TB"  # TTP (time to progression) / TB (tumor burden)
   init_state:
-    tplus_counts: [25, 25, 50, 300, 700, 200, 800, 24, 300]      # T+ cells minimum count
-    tprod_counts: [800, 200, 100, 30, 400, 500, 200, 600, 200]     # TP cells minimum count  
-    tneg_counts: [3.0e-6, 1.0e-6, 4.0e-6, 1.0e-6, 1.0e-6, 1.0e-6, 9.0e-7, 1.0e-6, 3.0e-6]   # T- cells minimum count (near zero)
+    s_counts: [500.0, 10.0]
+    r_counts: [10.0, 20.0]
+
+  params:
+    growth_rates: [0.27726, 0.24657]
+    death_rates: [0.1, 0.1]
+    carrying_capacity: 10000.0
+    drug_efficiency: 0.99
+    max_episode_steps: 3000
 
   # init_low:
   #   tplus_counts: 2424      # T+ cells minimum count
@@ -33,7 +40,7 @@ environment:
   # terminating when total population reaches x1.2 from starting population
 
 normalization:
-  enabled: true
+  enabled: false
   norm_obs: true
   norm_reward: false
 
@@ -65,9 +72,9 @@ algorithm:
 
   tuning:
     enabled: true
-    num_trials: 5
+    num_trials: 10
     search_space:
-      learning_rate: ['log', 8.0e-6, 5.0e-4]
+      learning_rate: ['log', 1.0e-4, 1.0e-4]
       # gamma: ['log', 0.99, 0.999]
       # gae_lambda: ['linear', 0.90, 0.99]
       # clip_range: ['linear', 0.05, 0.25]
@@ -78,7 +85,7 @@ training:
   
   # Evaluation during training
   eval_freq: 25000
-  n_eval_episodes: 1  # one is enough when initial state is fixed
+  n_eval_episodes: 10  # one is enough when initial state is fixed
   eval_deterministic: true
   
   # Checkpointing

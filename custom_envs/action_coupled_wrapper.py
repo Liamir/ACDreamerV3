@@ -374,6 +374,7 @@ class ActionCoupledWrapper(Wrapper):
         """
 
         self.terminated_envs = [False] * self.k
+        self.step_count = 0
         
         # Update seeds if a new master seed is provided
         if seed is not None:
@@ -389,7 +390,7 @@ class ActionCoupledWrapper(Wrapper):
         
         # Reset environments
         observations = []
-        total_counts = np.zeros(shape=(3), dtype=np.float64)
+        total_counts = np.zeros(shape=(2), dtype=np.float64)
         self.total_initial_population = 0.0
         for i, env in enumerate(self.envs):
             reset_seed = None if self.seeds is None else self.seeds[i]
@@ -492,7 +493,7 @@ class ActionCoupledWrapper(Wrapper):
         
     def step(self, action):
         obs, rewards, dones, truncs, infos = [], [], [], [], []
-        total_counts = np.zeros(shape=(3), dtype=np.float64)
+        total_counts = np.zeros(shape=(2), dtype=np.float64)
 
         # Growth (get next counts from the ODE, using the same action for all envs)
         if self.cfg.stochastic_action:
@@ -530,6 +531,8 @@ class ActionCoupledWrapper(Wrapper):
 
             total_counts += env.unwrapped.counts
 
+        self.step_count += 1
+
         # print('current k is', self.k)
         # print('observation from all envs:', obs)
 
@@ -537,7 +540,10 @@ class ActionCoupledWrapper(Wrapper):
         total_population = total_counts.sum()
         self.pop_norm = total_population / self.total_initial_population
         done = False
-        if self.pop_norm >= 1.2:
+        if self.cfg.objective_type == 'TTP' and self.pop_norm >= 1.2:
+            done = True
+        
+        elif self.cfg.objective_type == 'TB' and self.step_count >= self.cfg.params.max_episode_steps:
             done = True
     
         # print(f'{self.pop_norm = }')
@@ -692,7 +698,7 @@ class ActionCoupledWrapper(Wrapper):
             font = pygame.font.Font(None, 36)
             
             # Draw title
-            title_text = font.render("Prostate Cancer Therapy Environment", True, (0, 0, 0))
+            title_text = font.render("2-Population Lotka-Volterra Environment", True, (0, 0, 0))
             title_rect = title_text.get_rect(center=(grid_width // 2, title_height // 2))
             temp_surface.blit(title_text, title_rect)
             

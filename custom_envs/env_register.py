@@ -17,3 +17,9 @@ register(
     entry_point="custom_envs.cell_group:ProstateCancerTherapyEnv",
     max_episode_steps=10000,  # TODO change
 )
+
+register(
+    id="LV2Populations-v0",
+    entry_point="custom_envs.lotka_volterra_2_populations:LV2PopulationsEnv",
+    max_episode_steps=5000,  # TODO change
+)
