@@ -65,8 +65,10 @@ class ActionCoupledWrapper(Wrapper):
             for _, counts in self.init_options['init_state'].items():
                 if len(counts) != self.k:
                     print(f'Warning: specified num_envs does not match the initial state size ({self.k} != {len(counts)})')
+        elif 'low' in self.init_options and 'high' in self.init_options:
+            pass
         else:
-            print('Warning: Initial State not specified (currently it is a must)')
+            print('Warning: Initial State must be specified')
 
         self.reward_type = options.get('reward_type', 'min')
         self.termination_type = options.get('termination_type', 'first')
@@ -411,7 +413,23 @@ class ActionCoupledWrapper(Wrapper):
                 env.seed(reset_seed)
             
             # Reset and get observation
-            subenv_options = {cell_type: counts[i] for cell_type, counts in reset_options['init_state'].items()}
+            if 'low' in reset_options and 'high' in reset_options:
+                subenv_options = {}
+                cell_types = reset_options['low'].keys()
+                for cell_type in cell_types:
+                    low_count = reset_options['low'][cell_type]
+                    high_count = reset_options['high'][cell_type]
+                    
+                    log_low = np.log(low_count)
+                    log_high = np.log(high_count)
+                    log_random = np.random.uniform(log_low, log_high)
+                    random_count = np.exp(log_random)
+                    subenv_options[cell_type] = random_count
+                # print(f"Randomized initial counts: {subenv_options}")
+                
+            else:
+                subenv_options = {cell_type: counts[i] for cell_type, counts in reset_options['init_state'].items()}
+            
             self.total_initial_population += np.sum(list(subenv_options.values()))
             result = env.reset(seed=reset_seed, options=subenv_options)
             
@@ -449,52 +467,6 @@ class ActionCoupledWrapper(Wrapper):
             print(f"Warning: Stacked obs size {len(final_observation)} != expected {expected_size}")
 
         return final_observation, info
-    
-    def _apply_manual_initialization(self, env, options):
-        """
-        Manually apply initialization ranges for environments that don't support options.
-        This is a fallback method for older environments.
-        """
-        env_type = type(env.unwrapped).__name__.lower()
-        
-        if 'cartpole' in env_type:
-            if hasattr(env.unwrapped, 'state'):
-                state = np.array(env.unwrapped.state)
-                
-                # Sample new values for specified variables
-                for i, var_name in enumerate(['x', 'x_dot', 'theta', 'theta_dot']):
-                    new_val = self._sample_from_ranges(options['init_low'], options['init_high'], var_name)
-                    if new_val is not None:
-                        state[i] = new_val
-                
-                env.unwrapped.state = state
-                
-        elif 'mountaincar' in env_type:
-            if hasattr(env.unwrapped, 'state'):
-                state = np.array(env.unwrapped.state)
-                
-                # Sample new values for MountainCar variables  
-                for i, var_name in enumerate(['position', 'velocity']):
-                    new_val = self._sample_from_ranges(options['init_low'], options['init_high'], var_name)
-                    if new_val is not None:
-                        state[i] = new_val
-                
-                env.unwrapped.state = state
-        
-        # Reset steps_beyond_done if it exists
-        if hasattr(env.unwrapped, 'steps_beyond_done'):
-            env.unwrapped.steps_beyond_done = None
-    
-    def _get_observation_after_state_change(self, env):
-        """Get observation after manually changing environment state."""
-        env_type = type(env.unwrapped).__name__.lower()
-        
-        # For most environments, the observation is just the state
-        if hasattr(env.unwrapped, 'state') and env.unwrapped.state is not None:
-            return np.array(env.unwrapped.state, dtype=np.float64)
-        
-        # Fallback
-        return env.observation_space.sample()
         
     def step(self, action):
         obs, rewards, dones, truncs, infos = [], [], [], [], []

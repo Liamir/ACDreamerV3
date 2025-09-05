@@ -11,13 +11,13 @@ class LV2PopulationsEnv(gym.Env):
         'render_fps': 30,
     }
 
-    def __init__(self, LV_params, cfg, dt=0.01, render_mode='rgb_array'):
+    def __init__(self, LV_params, cfg, render_mode='rgb_array'):
         self.render_mode = render_mode
-        self.dt = dt
         self.params = copy.deepcopy(LV_params)
         self.cfg = cfg
 
         # ODE parameters
+        self.dt = LV_params['dt']
         self.growth_rates = np.array(LV_params['growth_rates'])
         self.death_rates = np.array(LV_params['death_rates'])
         self.carrying_capacity = LV_params['carrying_capacity']
@@ -25,21 +25,9 @@ class LV2PopulationsEnv(gym.Env):
         
         # Sensitive (S) counts and Resistant (R) counts
         counts_low = np.array([0.0] * 2, dtype=np.float64)
-        counts_high = np.array([self.carrying_capacity] * 2, dtype=np.float64)
-
-        # if self.cfg.objective_type == 'TB':
-        #     self.observation_space = gym.spaces.Box(counts_low, counts_high, dtype=np.float64)
-        # elif self.cfg.objective_type == 'TTP':
-        #     pop_norm_low = np.array([0.0], dtype=np.float64)
-        #     pop_norm_high = np.array([np.inf], dtype=np.float64)
-        #     self.observation_space = gym.spaces.Box(
-        #         np.concatenate([counts_low, pop_norm_low]),
-        #         np.concatenate([counts_high, pop_norm_high]),
-        #         dtype=np.float64
-        #     )
+        counts_high = np.array([self.carrying_capacity * 2] * 2, dtype=np.float64)
         self.observation_space = gym.spaces.Box(counts_low, counts_high, dtype=np.float64)
         
-
         # 0 is off treatment, 1 is on treatment
         self.action_space = gym.spaces.Discrete(2)
     

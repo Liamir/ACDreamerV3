@@ -37,15 +37,13 @@ class BaseTrainer(ABC):
 
         if hasattr(self.cfg.environment, 'init_low') and hasattr(self.cfg.environment, 'init_high'):
             init_low = getattr(self.cfg.environment, 'init_low', None)
-            init_high = getattr(self.cfg.environment, 'init_high', None)
+            init_high = getattr(self.cfg.environment, 'init_high', None)            
+            options['low'] = dict(init_low) if hasattr(init_low, '_asdict') else init_low
+            options['high'] = dict(init_high) if hasattr(init_high, '_asdict') else init_high
             
-            if init_low is not None and init_high is not None:
-                options['low'] = dict(init_low) if hasattr(init_low, '_asdict') else init_low
-                options['high'] = dict(init_high) if hasattr(init_high, '_asdict') else init_high
-                
-                print(f"Using custom initialization ranges:")
-                print(f"  Low: {options['low']}")
-                print(f"  High: {options['high']}")
+            print(f"Using custom initialization ranges:")
+            print(f"  Low: {options['low']}")
+            print(f"  High: {options['high']}")
         
         if hasattr(self.cfg.environment, 'init_state'):
             init_state = self.cfg.environment.init_state
@@ -357,6 +355,7 @@ class BaseTrainer(ABC):
                 
                 done = done or truncated
                 total_reward += reward
+                print('steps taken', steps)
                 steps += 1
                 
                 if done:

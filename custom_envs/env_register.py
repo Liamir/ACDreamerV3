@@ -21,5 +21,5 @@ register(
 register(
     id="LV2Populations-v0",
     entry_point="custom_envs.lotka_volterra_2_populations:LV2PopulationsEnv",
-    max_episode_steps=5000,  # TODO change
+    max_episode_steps=3000,  # TODO change
 )
