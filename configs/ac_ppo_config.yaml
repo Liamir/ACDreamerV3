@@ -5,18 +5,18 @@ experiment:
     # "CartPole-v1"
     # "Pendulum-v1"
   env_import: "LV2Populations-v0"
-  name: "lv2pop_1env_2M"
+  name: "lv2pop_1env_3Msteps_ttp_random_init_state_9k_termination_linear_norm"  # 
   description: "PPO Experiment"
   save_path: "./runs"
   num_envs: 1
 
 training:
-  timesteps: 2000000   # used for train and resume
+  timesteps: 3000000   # used for train and resume
   use_set_transformer: false
 
   # Evaluation during training
   eval_freq: 25000
-  n_eval_episodes: 15  # one is enough when initial state is fixed
+  n_eval_episodes: 25  # one is enough when initial state is fixed
   eval_deterministic: true
   
   # Checkpointing
@@ -25,29 +25,32 @@ training:
 
 environment:
   agent_type: "spatial"  # spatial / bulk
-  objective_type: "TB"  # TTP (time to progression) / TB (tumor burden)
-  # init_state:
-  #   s_counts: [12000.0, 12000.0]
-  #   r_counts: [1.0e-2, 1.0e-2]
+  reward_type: "TTP"  # TTP (time to progression) / TB (tumor burden)
+  observation_type: "stacked"  # stacked / stacked_pop_norm
+
 
   params:
     dt: 0.5  # default is 0.01
-    growth_rates: [0.027, 0.020]
-    death_rates: [0.005, 0.005]
+    growth_rates: [0.035, 0.027]  # S, R
+    death_rates: [0.0, 0.0]
     carrying_capacity: 10000.0
     drug_efficiency: 1.5
     max_episode_steps: 3000
 
-  init_low:
-    s_counts: 10.0
-    r_counts: 1.0e-2
+  init_state:
+    s_counts: [7000.0]
+    r_counts: [1.0]
+
+  # init_low:
+  #   s_counts: 1.0e-3
+  #   r_counts: 1.0e-3
     
-  init_high:
-    s_counts: 12000.0
-    r_counts: 10.0
+  # init_high:
+  #   s_counts: 4.0e+3
+  #   r_counts: 4.0e+3
 
   stochastic_action: false
-  reward_type: "avg"  # min / avg / sum
+  aggregation_type: "avg"  # min / avg / sum
   termination_type: null  # first / half / all
   # terminating when total population reaches x1.2 from starting population
 
@@ -98,7 +101,7 @@ algorithm:
 evaluation:
   eval_type: "visual"  # visual / numeric
   test_only_fixed_policy: false
-  fixed_policy_type: "MTD"  # MTD / Adaptive / Optimal
+  fixed_policy_type: "Threshold"  # MTD / Threshold / Adaptive
   episodes: 1
   model_type: "best"
   model_path: null

@@ -49,9 +49,10 @@ class BaseTrainer(ABC):
             init_state = self.cfg.environment.init_state
             options['init_state'] = dict(init_state) if hasattr(init_state, '_asdict') else init_state
         
-        if hasattr(self.cfg.environment, 'reward_type'):
-            reward_type = getattr(self.cfg.environment, 'reward_type')
-            options['reward_type'] = reward_type
+        # TODO: maybe remove this? can't see any use
+        if hasattr(self.cfg.environment, 'aggregation_type'):
+            aggregation_type = getattr(self.cfg.environment, 'aggregation_type')
+            options['aggregation_type'] = aggregation_type
 
         if hasattr(self.cfg.environment, 'termination_type'):
             termination_type = getattr(self.cfg.environment, 'termination_type')
@@ -330,6 +331,7 @@ class BaseTrainer(ABC):
                 obs = obs[0]
             total_reward = 0
             steps = 0
+
             
             print(f'Started episode {episode + 1}')
             while True:
@@ -342,11 +344,11 @@ class BaseTrainer(ABC):
                             action = 0
                         elif pop_norm >= 1.0:
                             action = 1
-                    if fixed_policy == 'Optimal':
+                    if fixed_policy == 'Threshold':
                         pop_norm = obs[-1]
-                        if pop_norm < 1.16:
+                        if pop_norm < 0.1:
                             action = 0
-                        elif pop_norm >= 1.16:
+                        elif pop_norm >= 0.1:
                             action = 1
                 else:
                     action, _states = model.predict(obs, deterministic=True)
@@ -355,7 +357,7 @@ class BaseTrainer(ABC):
                 
                 done = done or truncated
                 total_reward += reward
-                print('steps taken', steps)
+                # print('steps taken', steps)
                 steps += 1
                 
                 if done:
