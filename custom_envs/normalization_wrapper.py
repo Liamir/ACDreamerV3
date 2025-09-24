@@ -6,12 +6,13 @@ class NormalizationWrapper(gym.Wrapper):
     def __init__(self, env, norm_obs=True, norm_reward=True, clip_reward=10.0, cfg=None):
         super().__init__(env)
         self.agent_type = cfg.agent_type
-        self.objective_type = cfg.objective_type
+        self.observation_type = cfg.observation_type
         self.effective_k = env.original_k if self.agent_type == 'spatial' else 1
         self.single_obs_size = 2
         self.norm_obs = norm_obs
         self.norm_reward = norm_reward
         self.clip_reward = clip_reward
+        self.carrying_capacity = cfg.params.carrying_capacity
 
         if norm_reward:
             self.ret_rms = RunningMeanStd(shape=())
@@ -26,18 +27,28 @@ class NormalizationWrapper(gym.Wrapper):
         if not self.norm_obs:
             return obs
         
-        # counts normalization
-        # obs size (np array): 4K + 1: 4 * (c11, c12, c13, p) + total_p
-        for i in range(0, self.single_obs_size * self.effective_k, self.single_obs_size):
-            obs[i : i + self.single_obs_size] = ((np.log10(obs[i : i + self.single_obs_size]) - (-9.0)) / (3.0 - (-9.0))) * 2 - 1
-
-        # total population normalization
-        original_population = self.env.total_initial_population
-        if self.objective_type == 'TTP':
-            # total p should be in the range (1e2, 1e5)
-            # div by original total - must be in the range (0, 1.2), because of termination
+        if self.observation_type == 'stacked_pop_norm':
+            # Linear counts normalization (all except last element)
+            count_obs = obs[:-1]  
+            max_count = self.env.carrying_capacity
+            obs[:-1] = (count_obs / max_count) * 2 - 1
+            
+            # total population normalization (last element)
+            original_population = self.env.total_initial_population
             obs[-1] = (obs[-1] / original_population) * (2.0 / 1.2) - 1
-        
+            
+        else:  # observation_type == 'stacked'
+            # Linear counts normalization (all elements)
+            max_count = self.carrying_capacity
+            obs = (obs / max_count) * 2 - 1
+
+        # Log counts normalization (commented out)
+        # for i in range(0, self.single_obs_size * self.effective_k, self.single_obs_size):
+        #     obs[i : i + self.single_obs_size] = ((np.log10(obs[i : i + self.single_obs_size]) - (-9.0)) / (3.0 - (-9.0))) * 2 - 1
+        # if self.observation_type == 'stacked_pop_norm':
+        #     original_population = self.env.total_initial_population
+        #     obs[-1] = (obs[-1] / original_population) * (2.0 / 1.2) - 1
+
         return obs
         
     def _normalize_reward(self, reward):

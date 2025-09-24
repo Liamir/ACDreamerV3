@@ -70,7 +70,7 @@ class ActionCoupledWrapper(Wrapper):
         else:
             print('Warning: Initial State must be specified')
 
-        self.reward_type = options.get('reward_type', 'min')
+        self.aggregation_type = options.get('aggregation_type', 'min')
         self.termination_type = options.get('termination_type', 'first')
 
         # Create environments with specific seeds and render mode
@@ -105,24 +105,24 @@ class ActionCoupledWrapper(Wrapper):
 
         if self.cfg.agent_type == 'spatial':
             stacked_space = self._create_stacked_observation_space(single_obs_space, k)
-            if self.cfg.objective_type == 'TTP':
+            if self.cfg.observation_type == 'stacked_pop_norm':
                 # Add 1 dimension for pop_norm global metric
                 self.observation_space = gym.spaces.Box(
                     low=np.concatenate([stacked_space.low, np.array([0.0])]),
                     high=np.concatenate([stacked_space.high, np.array([np.inf])]),
                     dtype=np.float64
                 )
-            elif self.cfg.objective_type == 'TB':
+            elif self.cfg.observation_type == 'stacked':
                 self.observation_space = stacked_space
 
         elif self.cfg.agent_type == 'bulk':
-            if self.cfg.objective_type == 'TTP':
+            if self.cfg.observation_type == 'stacked_pop_norm':
                 self.observation_space = gym.spaces.Box(
                     low=np.concatenate([single_obs_space.low, np.array([0.0])]),
                     high=np.concatenate([single_obs_space.high, np.array([np.inf])]),
                     dtype=single_obs_space.dtype
                 )
-            elif self.cfg.objective_type == 'TB':
+            elif self.cfg.observation_type == 'stacked':
                 self.observation_space = single_obs_space
         
         self.terminated_envs = [False] * k  # Track terminated state for each environment
@@ -419,7 +419,6 @@ class ActionCoupledWrapper(Wrapper):
                 for cell_type in cell_types:
                     low_count = reset_options['low'][cell_type]
                     high_count = reset_options['high'][cell_type]
-                    
                     log_low = np.log(low_count)
                     log_high = np.log(high_count)
                     log_random = np.random.uniform(log_low, log_high)
@@ -450,15 +449,15 @@ class ActionCoupledWrapper(Wrapper):
         # Stack all observations into a single vector
         stacked_obs = np.concatenate(observations)
         if self.cfg.agent_type == 'spatial':
-            if self.cfg.objective_type == 'TTP':
+            if self.cfg.observation_type == 'stacked_pop_norm':
                 final_observation = np.concatenate([stacked_obs, total_population])
-            elif self.cfg.objective_type == 'TB':
+            elif self.cfg.observation_type == 'stacked':
                 final_observation = stacked_obs
 
         elif self.cfg.agent_type == 'bulk':
-            if self.cfg.objective_type == 'TTP':
+            if self.cfg.observation_type == 'stacked_pop_norm':
                 final_observation = np.concatenate([total_counts, total_population])
-            elif self.cfg.objective_type == 'TB':
+            elif self.cfg.observation_type == 'stacked':
                 final_observation = total_counts
 
         # Ensure the stacked observation matches our observation space
@@ -517,33 +516,39 @@ class ActionCoupledWrapper(Wrapper):
         total_population = total_counts.sum()
         self.pop_norm = total_population / self.total_initial_population
         done = False
-        if self.cfg.objective_type == 'TTP' and self.pop_norm >= 1.2:
+        # regular ttp termination
+        # if self.cfg.reward_type == 'TTP' and self.pop_norm >= 1.2:
+        #     done = True
+        # new ttp termination that is independent of the initial state
+        # print(self.step_count, total_population)
+        # print(self.cfg.reward_type)
+        if self.cfg.reward_type == 'TTP' and total_population >= 9000.0:
             done = True
         
-        elif self.cfg.objective_type == 'TB' and self.step_count >= self.cfg.params.max_episode_steps:
+        elif self.cfg.reward_type == 'TB' and self.step_count >= self.cfg.params.max_episode_steps:
             done = True
     
         # print(f'{self.pop_norm = }')
 
-        if self.reward_type == 'min':
+        if self.aggregation_type == 'min':
             reward = np.min(rewards)
-        elif self.reward_type == 'avg':
+        elif self.aggregation_type == 'avg':
             reward = np.mean(rewards)
-        elif self.reward_type == 'sum':
+        elif self.aggregation_type == 'sum':
             reward = np.sum(rewards)
         else:
-            print(f'Warning: reward type: {self.reward_type} not supported.')
+            print(f'Warning: reward type: {self.aggregation_type} not supported.')
 
         if self.cfg.agent_type == 'spatial':
             stacked_obs = np.concatenate(obs)
-            if self.cfg.objective_type == 'TTP':
+            if self.cfg.observation_type == 'stacked_pop_norm':
                 final_observation = np.concatenate([stacked_obs, np.array([total_population], dtype=np.float64)])
-            elif self.cfg.objective_type == 'TB':
+            elif self.cfg.observation_type == 'stacked':
                 final_observation = stacked_obs
         elif self.cfg.agent_type == 'bulk':
-            if self.cfg.objective_type == 'TTP':
+            if self.cfg.observation_type == 'stacked_pop_norm':
                 final_observation = np.concatenate([total_counts, np.array([total_population])])
-            elif self.cfg.objective_type == 'TB':
+            elif self.cfg.observation_type == 'stacked':
                 final_observation = total_counts
         
         return final_observation, reward, done, False, {"individual_rewards": rewards, "infos": infos}

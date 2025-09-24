@@ -32,9 +32,9 @@ class LV2PopulationsEnv(gym.Env):
         self.action_space = gym.spaces.Discrete(2)
     
     def _get_obs(self):
-        # if self.cfg.objective_type == 'TB':
+        # if self.cfg.observation_type == 'stacked':
         #     return self.counts
-        # elif self.cfg.objective_type == 'TTP':
+        # elif self.cfg.observation_type == 'stacked_pop_norm':
         #     return np.concatenate([self.counts, np.array([self.population_size])])
         return self.counts
 
@@ -121,12 +121,16 @@ class LV2PopulationsEnv(gym.Env):
 
         reward = 0.0
 
-        if self.cfg.objective_type == 'TTP':
+        if self.cfg.reward_type == 'TTP':
             # reward given for every step before progression
             # TODO: tune the reward according to the MTD trajectory
             reward += 0.0005
 
-        elif self.cfg.objective_type == 'TB':
+        elif self.cfg.reward_type == 'TB':
+            # if self.population_size / self.initial_population_size < 1.2:  # below progression threshold
+                # print(f'adding reward :)')
+                # reward += 0.01
+            # prev approach: give reward purely based on population size
             reward -= self.population_size / (100 * self.carrying_capacity)
 
         observation = self._get_obs()
