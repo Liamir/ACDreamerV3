@@ -21,6 +21,7 @@ import custom_envs
 from custom_envs.action_coupled_wrapper import ActionCoupledWrapper
 from custom_envs.normalization_wrapper import NormalizationWrapper
 from ..core.tensorboard_callback import CustomTensorboardCallback
+from ..core.deterministic_eval import create_deterministic_eval_callback, FixedEvalStates, DeterministicEvaluator
 from ..core.experiment import ExperimentManager, print_env_info
 
 
@@ -433,9 +434,8 @@ class BaseTrainer(ABC):
         
         return episode_rewards, episode_steps, episode_scores
 
-    
     def _create_callbacks(self, experiment_path, eval_env):
-        """Create training callbacks with enhanced TensorBoard logging"""
+        """Create training callbacks with enhanced TensorBoard logging and deterministic evaluation"""
         
         # Existing callbacks
         checkpoint_callback = CheckpointCallback(
@@ -447,19 +447,34 @@ class BaseTrainer(ABC):
             verbose=0
         )
         
-        eval_callback = EvalCallback(
-            eval_env,
-            best_model_save_path=str(Path(experiment_path) / "models"),
-            log_path=str(Path(experiment_path) / "logs"),
-            eval_freq=self.cfg.training.eval_freq,
-            deterministic=getattr(self.cfg.training, 'eval_deterministic', True),
-            render=False,
-            verbose=0,
-            n_eval_episodes=getattr(self.cfg.training, 'n_eval_episodes', 5),
-        )
+        # Replace the standard EvalCallback with our deterministic version
+        # Keep the old one if you want both random and deterministic evaluation
+        if getattr(self.cfg.training, 'use_deterministic_eval', True):
+            # Use deterministic evaluation
+            deterministic_eval_callback = create_deterministic_eval_callback(
+                cfg=self.cfg,
+                eval_env=eval_env,
+                experiment_path=experiment_path,
+                eval_freq=self.cfg.training.eval_freq,
+                num_eval_states=getattr(self.cfg.training, 'num_eval_states', 10),
+                episodes_per_state=getattr(self.cfg.training, 'episodes_per_eval_state', 3)
+            )
+            eval_callbacks = [deterministic_eval_callback]
+        else:
+            # Use original random evaluation
+            eval_callback = EvalCallback(
+                eval_env,
+                best_model_save_path=str(Path(experiment_path) / "models"),
+                log_path=str(Path(experiment_path) / "logs"),
+                eval_freq=self.cfg.training.eval_freq,
+                deterministic=getattr(self.cfg.training, 'eval_deterministic', True),
+                render=False,
+                verbose=0,
+                n_eval_episodes=getattr(self.cfg.training, 'n_eval_episodes', 15),
+            )
+            eval_callbacks = [eval_callback]
         
-        # New custom TensorBoard callback
-        # Check if logging configuration exists, otherwise use defaults
+        # Custom TensorBoard callback
         log_frequency = getattr(self.cfg.logging, 'log_frequency', 1000) if hasattr(self.cfg, 'logging') else 1000
         track_gradients = getattr(self.cfg.logging, 'track_gradients', False) if hasattr(self.cfg, 'logging') else False
         track_data_stats = getattr(self.cfg.logging, 'track_data_stats', True) if hasattr(self.cfg, 'logging') else True
@@ -472,7 +487,7 @@ class BaseTrainer(ABC):
         )
         
         # Return all callbacks
-        callbacks = [checkpoint_callback, eval_callback, custom_tb_callback]
+        callbacks = [checkpoint_callback] + eval_callbacks + [custom_tb_callback]
         
         return callbacks
     

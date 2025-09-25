@@ -174,8 +174,8 @@ class LV2PopulationWithPolicy(LV2PopulationBase):
         if self.model is None:
             raise ValueError("No policy model loaded. Use load_policy_model() first.")
         
-        max_S = self.K * 0.9
-        max_R = self.K * 0.9
+        max_S = self.K * 1.2
+        max_R = self.K * 1.2
         
         S_range = np.linspace(0, max_S, resolution)
         R_range = np.linspace(0, max_R, resolution)
@@ -341,10 +341,10 @@ class LV2PopulationWithPolicy(LV2PopulationBase):
         
         # Add sample trajectories with thicker lines
         initial_conditions = [
-            [max_S*0.1, max_R*0.1],
-            [max_S*0.8, max_R*0.1], 
-            [max_S*0.1, max_R*0.8],
-            [max_S*0.5, max_R*0.5],
+            # [self.K*0.1, self.K*0.1],
+            # [self.K*0.8, self.K*0.01], 
+            # [self.K*0.1, self.K*0.5],
+            # [self.K*0.6, self.K*0.05],
         ]
         
         colors = ['#2ca02c', '#ff7f0e', '#d62728', '#9467bd']  # Distinct colors
@@ -353,21 +353,21 @@ class LV2PopulationWithPolicy(LV2PopulationBase):
             try:
                 sol = solve_ivp(
                     self.ode_system_with_policy,
-                    (0, 50), ic,
+                    (0, 300), ic,
                     method='RK45',
                     rtol=1e-6, atol=1e-8,
                     max_step=0.5
                 )
                 
                 if sol.success and len(sol.y[0]) > 5:
-                    ax.plot(sol.y[0], sol.y[1], color=colors[i], linewidth=3, 
+                    ax.plot(sol.y[0], sol.y[1], color=colors[i], linewidth=2, 
                            alpha=0.9, zorder=5)
                     ax.scatter(ic[0], ic[1], color=colors[i], s=150, marker='o', 
-                              edgecolor='white', linewidth=2, zorder=6)
+                              edgecolor='white', linewidth=1, zorder=6)
                     
                     # Add endpoint marker
                     ax.scatter(sol.y[0][-1], sol.y[1][-1], color=colors[i], s=150, 
-                              marker='s', edgecolor='white', linewidth=2, zorder=6)
+                              marker='s', edgecolor='white', linewidth=1, zorder=6)
             except Exception as e:
                 print(f"Error plotting policy trajectory {i}: {e}")
                 continue

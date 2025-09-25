@@ -5,7 +5,7 @@ experiment:
     # "CartPole-v1"
     # "Pendulum-v1"
   env_import: "LV2Populations-v0"
-  name: "lv2pop_1env_3Msteps_ttp_random_init_state_9k_termination_linear_norm"  # 
+  name: "lv2pop_1env_3Msteps_ttp_random_init_state_9k_termination_linear_norm_det_eval"
   description: "PPO Experiment"
   save_path: "./runs"
   num_envs: 1
@@ -15,9 +15,9 @@ training:
   use_set_transformer: false
 
   # Evaluation during training
-  eval_freq: 25000
+  eval_freq: 20000
   n_eval_episodes: 25  # one is enough when initial state is fixed
-  eval_deterministic: true
+  use_deterministic_eval: true
   
   # Checkpointing
   save_freq: 600000
@@ -37,17 +37,17 @@ environment:
     drug_efficiency: 1.5
     max_episode_steps: 3000
 
-  init_state:
-    s_counts: [7000.0]
-    r_counts: [1.0]
+  # init_state:
+  #   s_counts: [7000.0]
+  #   r_counts: [1.0]
 
-  # init_low:
-  #   s_counts: 1.0e-3
-  #   r_counts: 1.0e-3
+  init_low:
+    s_counts: 1.0e-3
+    r_counts: 1.0e-3
     
-  # init_high:
-  #   s_counts: 4.0e+3
-  #   r_counts: 4.0e+3
+  init_high:
+    s_counts: 4.0e+3
+    r_counts: 4.0e+3
 
   stochastic_action: false
   aggregation_type: "avg"  # min / avg / sum

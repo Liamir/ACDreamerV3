@@ -47,7 +47,8 @@ def example_policy_analysis_direct_path():
     print("=" * 60)
     
     # Update this path to your actual model location
-    model_path = "../runs/ppo_lv2populations_lv2pop_1env_3Msteps_ttp_random_init_state_9k_termination_linear_norm_20250923_180241/models/best_model"
+    # model_path = "../runs/ppo_lv2populations_lv2pop_1env_3Msteps_ttp_random_init_state_9k_termination_linear_norm_20250923_180241/models/best_model"
+    model_path = "../runs/ppo_lv2populations_lv2pop_1env_3Msteps_ttp_random_init_state_9k_termination_linear_norm_det_eval_20250924_162008/models/best_model"
     
     # Run complete analysis
     integrator, figures = run_complete_analysis(
@@ -119,8 +120,9 @@ def example_manual_analysis():
     )
     
     # Step 2: Load your model
-    model_path = "../runs/ppo_lv2populations_lv2pop_1env_2Msteps_ttp_random_init_state_9k_termination_linear_norm_20250921_210935/models/best_model"
-    
+    # model_path = "../runs/ppo_lv2populations_lv2pop_1env_2Msteps_ttp_random_init_state_9k_termination_linear_norm_20250921_210935/models/best_model"
+    model_path = "../runs/ppo_lv2populations_lv2pop_1env_3Msteps_ttp_random_init_state_9k_termination_linear_norm_det_eval_20250924_162008/models/best_model"
+
     if not analyzer.load_policy_model(model_path):
         print("Failed to load model")
         return analyzer, None
@@ -173,7 +175,8 @@ def example_with_config():
     class MockConfig:
         class experiment:
             num_envs = 1
-            name = "lv2pop_1env_2Msteps_ttp_random_init_state_9k_termination_linear_norm"
+            # name = "lv2pop_1env_2Msteps_ttp_random_init_state_9k_termination_linear_norm"
+            name = "lv2pop_1env_3Msteps_ttp_random_init_state_9k_termination_linear_norm_det_eval"
             env_import = "lv2populations-v0"
         
         class algorithm:
